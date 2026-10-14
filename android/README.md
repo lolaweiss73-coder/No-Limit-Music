@@ -75,3 +75,12 @@ Official implementation reference: https://developer.android.com/media/media3/se
 - The full playlist Refresh button requests a complete dynamic catalog, using a YouTube Data API based public-playlist sync backend when configured. The existing static website currently publishes only 27 playlists and does not discover new YouTube playlists by itself.
 - Cloud recordings can stream in the native Media3 player using server-scoped authorization. The standalone Node server source is in /server; it is NOT yet deployed or integrated into the existing website UI.
 - This branch needs Android on-device testing and production signing; a successful CI build does not validate actual playback capture or cloud persistence.
+
+## Side-by-side QA builds
+
+The Debug build adds the application ID suffix `.dev` and shows the launcher
+label "מוזיקה ללא גבולות · בדיקה". It installs **beside** the existing
+production-signed app, without uninstalling or overwriting its data.
+This suffix applies ONLY to Debug; the Release applicationId remains
+`il.nolimits.music`. Production upgrade still requires the original
+release signing key. The two app installations have independent local data.
