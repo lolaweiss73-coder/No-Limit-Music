@@ -26,10 +26,18 @@ jobs:
           java-version: '17'
           cache: gradle
           cache-dependency-path: android/**/*.gradle
-      - name: Check preinstalled Android SDK
-        run: sdkmanager --version
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android command-line SDK
+        shell: bash
+        run: |
+          SDK_DIR="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$SDK_DIR/cmdline-tools"
+          curl -fsSL --retry 3 "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o "$RUNNER_TEMP/cmdline-tools.zip"
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$SDK_DIR/cmdline-tools"
+          mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "$SDK_DIR/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses >/dev/null
+          "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Compile and assemble test APK
         working-directory: android
         run: |
