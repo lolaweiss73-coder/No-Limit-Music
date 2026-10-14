@@ -35,6 +35,7 @@ jobs:
           unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$SDK_DIR/cmdline-tools"
           mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
           echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
           echo "$SDK_DIR/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           printf "y\\n%.0s" {1..40} | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses >/dev/null
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
