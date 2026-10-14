@@ -118,7 +118,7 @@ public final class CaptureService extends Service {
         Intent stop = new Intent(this, CaptureService.class).setAction(STOP);
         PendingIntent pendingStop = PendingIntent.getService(this, 2201, stop,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Intent open = new Intent(this, YouTubePlayerActivity.class)
+        Intent open = new Intent(this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent pendingOpen = PendingIntent.getActivity(this, 2202, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -195,7 +195,7 @@ public final class CaptureService extends Service {
                 if (read > 0) pcmStream.write(buffer, 0, read);
                 else if (read == AudioRecord.ERROR_DEAD_OBJECT
                         || read == AudioRecord.ERROR_INVALID_OPERATION) {
-                    audioFailure = "מערכת ההקלטה הפסיקה לספק שמע";
+                    if (recording) audioFailure = "מערכת ההקלטה הפסיקה לספק שמע";
                     break;
                 }
             }
