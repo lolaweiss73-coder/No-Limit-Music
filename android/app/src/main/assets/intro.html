@@ -8,7 +8,7 @@ window.pauseIntro=function(){active=false;if(player&&player.getPlayerState){resu
 window.resumeIntro=function(){active=true;if(resumePlayback&&player&&player.playVideo){resumePlayback=false;player.playVideo();}};
 function onYouTubeIframeAPIReady(){
  player=new YT.Player('player',{videoId:'nRfo1NdTN7k',width:'100%',height:'100%',
- playerVars:{autoplay:0,playsinline:1,controls:1,fs:0,origin:'https://il.nolimits.music'},
+ playerVars:{autoplay:0,playsinline:1,controls:1,fs:0,origin:'https://avi-music-player.lolaweiss73.chatgpt.site'},
  events:{onReady:function(e){if(active)e.target.playVideo();else resumePlayback=true;},
  onStateChange:function(e){if(e.data===0)notify('ended');if(e.data===1){if(!active){resumePlayback=true;e.target.pauseVideo();}else notify('playing');}},
  onError:function(){notify('error');},onAutoplayBlocked:function(){notify('blocked');}}});

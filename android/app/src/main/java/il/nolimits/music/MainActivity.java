@@ -30,13 +30,13 @@ public class MainActivity extends Activity {
     private Button play,shuffle,repeat;
     private SeekBar seek;
     private EditText search;
-    private int selected=-1; private boolean hostedOnly=true,offlineOnly=false,dragging=false;
+    private int selected=-1; private boolean hostedOnly=false,offlineOnly=false,dragging=false;
     private String query="";private boolean destroyed=false;
     private final Runnable ticker=new Runnable(){public void run(){updatePlayer();handler.postDelayed(this,700);}};
     private final BroadcastReceiver downloads=new BroadcastReceiver(){public void onReceive(Context c,Intent i){render();}};
     @Override public void onCreate(Bundle state){
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
-        if(state!=null){selected=state.getInt("selected",-1);query=state.getString("query","");hostedOnly=state.getBoolean("hosted",true);offlineOnly=state.getBoolean("offline",false);}
+        if(state!=null){selected=state.getInt("selected",-1);query=state.getString("query","");hostedOnly=state.getBoolean("hosted",false);offlineOnly=state.getBoolean("offline",false);}
         buildUi();
         try{playlists=Catalog.load(this);}catch(Exception e){toast("לא הצלחתי לטעון את הספרייה. נסה רענון.");}
         render();
@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         navigation.addView(button("רענון",()->refresh(true)),new LinearLayout.LayoutParams(0,dp(52),1));root.addView(navigation);
         search=new EditText(this);search.setSingleLine(true);search.setTextColor(Color.WHITE);search.setHintTextColor(MUTED);search.setTextSize(16);search.setHint("חפש שיר או פלייליסט");search.setText(query);
         search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){query=s.toString();render();}public void afterTextChanged(Editable e){}});root.addView(search);
-        LinearLayout filters=line();CheckBox direct=new CheckBox(this);direct.setText("ללא פרסומות");direct.setTextSize(14);direct.setTextColor(Color.WHITE);direct.setChecked(hostedOnly);direct.setOnCheckedChangeListener((b,v)->{hostedOnly=v;render();});filters.addView(direct);
+        LinearLayout filters=line();CheckBox direct=new CheckBox(this);direct.setText("רק שירים מהשרת (ללא פרסומות)");direct.setTextSize(14);direct.setTextColor(Color.WHITE);direct.setChecked(hostedOnly);direct.setOnCheckedChangeListener((b,v)->{hostedOnly=v;render();});filters.addView(direct);
         CheckBox offline=new CheckBox(this);offline.setText("שמורים במכשיר");offline.setTextSize(14);offline.setTextColor(Color.WHITE);offline.setChecked(offlineOnly);offline.setOnCheckedChangeListener((b,v)->{offlineOnly=v;selected=-2;render();});filters.addView(offline);root.addView(filters);
         ScrollView scroll=new ScrollView(this);rows=column();scroll.addView(rows);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout dock=column();dock.setPadding(dp(12),dp(8),dp(12),dp(8));dock.setBackground(rounded(CARD));
@@ -106,18 +106,18 @@ public class MainActivity extends Activity {
         }
         ArrayList<Catalog.Track> base=selected>=0?playlists.get(selected).tracks:all();for(Catalog.Track t:base)if(matches(t))visible.add(t);
         subtitle.setText((selected>=0?playlists.get(selected).title:"כל השירים")+" · "+visible.size()+" שירים");
-        if(!hostedOnly&&!offlineOnly)rows.addView(text("YouTube נפתח בנפרד; ייתכנו בו פרסומות ומגבלות נגינה ברקע.",14,MUTED));
-        rows.addView(button("נגן ברצף",()->{for(Catalog.Track t:visible)if(t.hosted()||Catalog.saved(this,t)){start(t);return;}toast("אין שירים זמינים לנגן ברשימה הזאת.");}));
+        if(!hostedOnly&&!offlineOnly)rows.addView(text("YouTube מתנגן בתוך האפליקציה; ייתכנו פרסומות ומגבלות השמעה ברקע.",14,MUTED));
+        rows.addView(button("נגן שיר ראשון",()->{for(Catalog.Track t:visible){if(t.hosted()||Catalog.saved(this,t))start(t);else openYouTube(t);return;}toast("אין שירים זמינים ברשימה הזאת.");}));
         if(visible.isEmpty())rows.addView(text("אין שירים בתצוגה הזאת. נסה לשנות את החיפוש או המסננים.",16,MUTED));
         for(Catalog.Track t:visible){
             boolean saved=Catalog.saved(this,t);LinearLayout row=line();row.setPadding(dp(6),dp(9),dp(6),dp(9));
             LinearLayout info=column();TextView name=text(t.title,16,Color.WHITE);name.setMaxLines(2);info.addView(name);
-            info.addView(text(saved?"במכשיר · זמין ללא אינטרנט":t.hosted()?"בשרת · ללא פרסומות":"YouTube · מקור חיצוני",13,saved?0xff83d7b2:MUTED));
-            info.setOnClickListener(v->{if(t.hosted()||saved)start(t);else openExternal(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            info.addView(text(saved?"במכשיר · זמין ללא אינטרנט":t.hosted()?"בשרת · ללא פרסומות":"YouTube · נגן מובנה",13,saved?0xff83d7b2:MUTED));
+            info.setOnClickListener(v->{if(t.hosted()||saved)start(t);else openYouTube(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             if(t.hosted())row.addView(button(saved?"מחק":"שמור",()->{if(Catalog.saved(this,t)){
                 new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;}((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).remove(Catalog.downloadId(this,t));Catalog.local(this,t).delete();getSharedPreferences("downloads",0).edit().remove(t.id).apply();render();}).setNegativeButton("ביטול",null).show();
             }else try{Catalog.download(this,t);toast("ההורדה מופיעה בהתראות. השיר יישמר במכשיר.");}catch(Exception e){toast("לא ניתן להתחיל הורדה. נסה שוב.");}}));
-            else row.addView(button("פתח",()->openExternal(t)));
+            else row.addView(button("נגן",()->openYouTube(t)));
             rows.addView(row);View rule=new View(this);rule.setBackgroundColor(CARD);rows.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));
         }
     }
@@ -130,7 +130,13 @@ public class MainActivity extends Activity {
         }
         if(queue.isEmpty())return;player.setMediaItems(queue,start,0);player.prepare();player.play();
     }
-    private void openExternal(Catalog.Track t){try{if(player!=null)player.pause();startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.youtube.com/watch?v="+t.id)));}catch(ActivityNotFoundException e){toast("לא נמצא יישום לפתיחת הקישור.");}}
+    private void openYouTube(Catalog.Track t){
+        if(player!=null)player.pause();
+        Intent intent=new Intent(this,YouTubePlayerActivity.class)
+            .putExtra(YouTubePlayerActivity.EXTRA_ID,t.id)
+            .putExtra(YouTubePlayerActivity.EXTRA_TITLE,t.title);
+        startActivity(intent);
+    }
     private void refresh(boolean announce){
         if(announce)toast("מעדכנת את הספרייה…");
         io.execute(()->{try{ArrayList<Catalog.Playlist> next=Catalog.refresh(this);runOnUiThread(()->{if(destroyed)return;playlists=next;render();if(announce)toast("הספרייה מעודכנת.");});}catch(Exception e){if(announce)runOnUiThread(()->toast("אין חיבור כרגע. הספרייה האחרונה נשארה זמינה."));}});

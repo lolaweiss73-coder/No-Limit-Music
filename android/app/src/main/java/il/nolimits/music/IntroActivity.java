@@ -47,9 +47,9 @@ public class IntroActivity extends Activity {
                     else if("error".equals(event)){handler.removeCallbacks(slow);status.setText("הקליפ לא זמין כרגע. אפשר לדלג ולהמשיך למוזיקה.");}
                     return true;
                 }
-                // Keep the app-owned document in place; ordinary player links open externally.
+                // Never launch a browser automatically from the intro player.
                 if(r.isForMainFrame()){
-                    if("https".equals(uri.getScheme()))try{startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(ActivityNotFoundException ignored){}
+                    status.setText("קישור חיצוני אינו נפתח אוטומטית. אפשר לדלג ולהמשיך למוזיקה.");
                     return true;
                 }
                 return false;
@@ -66,7 +66,7 @@ public class IntroActivity extends Activity {
         setContentView(root);
         try(java.io.InputStream in=getAssets().open("intro.html")){
             java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] buf=new byte[4096];int count;while((count=in.read(buf))!=-1)out.write(buf,0,count);
-            web.loadDataWithBaseURL("https://il.nolimits.music/",new String(out.toByteArray(),StandardCharsets.UTF_8),"text/html","UTF-8",null);
+            web.loadDataWithBaseURL(Catalog.ORIGIN,new String(out.toByteArray(),StandardCharsets.UTF_8),"text/html","UTF-8",null);
             handler.postDelayed(slow,15000);
         }catch(Exception e){status.setText("לא ניתן לטעון את הקליפ. אפשר לדלג.");}
     }

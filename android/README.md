@@ -1,4 +1,4 @@
-# מוזיקה ללא גבולות — Android preview 1.0
+# מוזיקה ללא גבולות — Android source (1.2.0)
 
 Native Android application backed by the existing public music catalog at https://avi-music-player.lolaweiss73.chatgpt.site/ . The existing website is unchanged.
 
@@ -34,3 +34,14 @@ Official implementation reference: https://developer.android.com/media/media3/se
 - The video streams from YouTube, requires internet, and is not an offline bundled MP4. YouTube controls video availability, embedding, autoplay restrictions, and advertisements.
 - Validation: Java/Android debug build; signed APK certificate compared with version 1.0; isolated JavaScript event/lifecycle checks. No Android device/emulator is attached, so actual video playback and device UI require on-device verification. Android lint could not finish offline because its Kotlin stdlib 1.7.10 dependency was unavailable.
 - Install this signed versionCode 2 APK over versionCode 1 to retain application data. Both use the existing development signing key, backed up separately; the source archive deliberately excludes signing secrets and machine-local build paths.
+
+## 1.2.0 — in-app playback for YouTube-only tracks (2026-10-14)
+- Added YouTubePlayerActivity and `youtube_player.html` using the official YouTube IFrame Player API. Selecting a YouTube-only track no longer opens an external browser.
+- All 27 playlists and 686 listed tracks display by default; users can explicitly filter to existing server-hosted tracks.
+- Server-hosted MP3 playback, download, background service, shuffle and repeat remain on Media3. YouTube-only video playback uses a separate in-app WebView with YouTube's own playback controls.
+- Intro page no longer automatically launches an external browser. The embed origin matches the catalog site to provide API client identity.
+- Same Android application ID `il.nolimits.music`; versionCode is 3.
+- Verified a successful debug compile in GitHub Actions. This is not a signed production upgrade.
+- Still to test: actual YouTube IFrame playback and autoplay restrictions on an Android phone, intro completion, playlist interaction, offline MP3s and downloads.
+- YouTube-only media can still contain advertisements and impose playback restrictions. No downloading, recording, ad removal or server import from YouTube is implemented.
+- The signing keystore used by the currently installed APK is required for an in-place update. Creating a new signing key would require uninstalling the older signed app.
