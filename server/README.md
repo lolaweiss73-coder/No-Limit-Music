@@ -1,6 +1,6 @@
 # No Limit Music — cloud recording and public-playlist sync backend
 
-This is a **standalone server component** for Android 1.5. It has not been
+This is a **standalone server component** for Android 1.6. It has not been
 deployed or connected to the existing `chatgpt.site` website.
 
 ## Routes
@@ -8,8 +8,8 @@ deployed or connected to the existing `chatgpt.site` website.
 - `GET /healthz` — service readiness and whether YouTube sync is configured
 - `GET /api/library.json` — current entire catalog, including uploaded recordings
 - `GET /api/library.json?sync=1` — authenticated fresh sync of all public playlists from `YOUTUBE_CHANNEL_ID`. Requires `YOUTUBE_API_KEY` (server-side only). Preserves existing hand-curated lists and hosted tracks.
-- `PUT /api/recordings/{youtubeVideoId}` — authenticated complete MP4 upload, maximum 400MB. Private storage under `DATA_DIR/media`.
-- `GET /api/recordings/{youtubeVideoId}` — authenticated streaming with byte range support for Media3.
+- `PUT /api/recordings/{youtubeVideoId}.mp4` — authenticated complete MP4 upload, maximum 400MB. Private storage under `DATA_DIR/media`.
+- `GET /api/recordings/{youtubeVideoId}.mp4` — authenticated streaming with byte range support for Media3.
 
 All recording endpoints and force-sync need `Authorization: Bearer $UPLOAD_TOKEN`.
 `UPLOAD_TOKEN` must be configured as a secret on the server and entered once in the Android app's cloud settings (never committed to Git).
@@ -31,10 +31,10 @@ settings, uploads cannot complete; the app retains its private staging file for 
 This is an owner-operated proof of concept: a single shared access token is
 **not adequate for multi-user distribution**. Before general release, use
 per-account authentication, per-user ownership/permission checks, upload
-quotas, rate limits and a proper object-storage backend. WAV recordings
-consume substantial storage; a later version should encode AAC/Opus.
+quotas, rate limits and a proper object-storage backend. Video recordings
+consume substantial storage; Android currently encodes H.264/AAC MP4.
 The existing website's HTML frontend remains unchanged. The website
-must be integrated separately with this API before uploaded audio can be
+must be integrated separately with this API before uploaded video can be
 played directly from its browser interface. Recording success does not
 guarantee Android allows capture of every source.
 
