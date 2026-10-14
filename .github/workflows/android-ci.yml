@@ -39,6 +39,8 @@ jobs:
           echo "$SDK_DIR/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           printf "y\\n%.0s" {1..40} | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses >/dev/null
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Check cloud service JavaScript syntax
+        run: node --check server/server.mjs
       - name: Compile and assemble test APK
         working-directory: android
         run: |
