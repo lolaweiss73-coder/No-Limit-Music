@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
                     if(item==null||!autoCacheEnabled())return;
                     for(Catalog.Playlist list:playlists)for(Catalog.Track t:list.tracks){
                         if(t.id.equals(item.mediaId)){
-                            if(t.hosted()&&!Catalog.saved(MainActivity.this,t)&&!RecordedAudio.saved(MainActivity.this,t.id))
+                            if(t.hosted()&&!Catalog.saved(MainActivity.this,t)&&!CloudUpload.localAvailable(MainActivity.this,t.id))
                                 try{Catalog.download(MainActivity.this,t);}catch(Exception ignored){}
                             return;
                         }
@@ -275,7 +275,7 @@ public class MainActivity extends Activity {
         // Fetch only audio already hosted on our server, not YouTube playback.
         // The current playback streams normally while DownloadManager makes a
         // local copy. Future playback resolves to the local file.
-        if(chosen.hosted()&&!Catalog.saved(this,chosen)&&!RecordedAudio.saved(this,chosen.id)&&autoCacheEnabled()){
+        if(chosen.hosted()&&!Catalog.saved(this,chosen)&&!CloudUpload.localAvailable(this,chosen.id)&&autoCacheEnabled()){
             try{Catalog.download(this,chosen);}
             catch(Exception e){toast("לא ניתן לשמור את השיר אוטומטית כרגע.");}
         }
