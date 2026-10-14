@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
                     if(item==null||!autoCacheEnabled())return;
                     for(Catalog.Playlist list:playlists)for(Catalog.Track t:list.tracks){
                         if(t.id.equals(item.mediaId)){
-                            if(t.hosted()&&!Catalog.saved(MainActivity.this,t)&&!RecordedAudio.saved(MainActivity.this,t.id))
+                            if(t.hosted()&&!Catalog.saved(MainActivity.this,t)&&!CloudUpload.localAvailable(MainActivity.this,t.id))
                                 try{Catalog.download(MainActivity.this,t);}catch(Exception ignored){}
                             return;
                         }
@@ -119,7 +119,10 @@ public class MainActivity extends Activity {
                     "אפס את ההעדפה והחזר את הקליפ לפתיחה הבאה",
                     disabled?"מצב הקליפ: כבוי בפתיחה":"מצב הקליפ: פעיל בפתיחה",
                     autoCacheEnabled()?"שמירת קובצי השרת לאופליין: פעילה":"שמירת קובצי השרת לאופליין: כבויה",
-                    CloudUpload.keepOffline(this)?"שמור גם הקלטות במכשיר לאופליין: כן":"שמור גם הקלטות במכשיר לאופליין: לא",
+                    CloudUpload.MODE_NO.equals(CloudUpload.offlineMode(this))
+                            ?"שמירה לאופליין: לא"
+                            :"שמירה לאופליין: כן · "+(CloudUpload.MODE_AUDIO.equals(CloudUpload.offlineMode(this))
+                            ?"שמע בלבד":"וידאו עם שמע"),
                     "הגדרת שרת הקלטות ופרטי התחברות",
                     "בדיקת רענון כל הפלייליסטים"},(d,which)->{
                 if(which==0){if(player!=null)player.pause();startActivity(new Intent(this,IntroActivity.class).putExtra(IntroActivity.REPLAY,true));}
@@ -129,15 +132,39 @@ public class MainActivity extends Activity {
                     getSharedPreferences(CACHE_SETTINGS,0).edit().putBoolean(AUTO_CACHE,next).apply();
                     toast(next?"שמירת קובצי השרת לאופליין הופעלה.":"שמירת קובצי השרת לאופליין כובתה.");
                 }
-                else if(which==4){
-                    boolean next=!CloudUpload.keepOffline(this);
-                    CloudUpload.prefs(this).edit().putBoolean(CloudUpload.KEEP_OFFLINE,next).apply();
-                    if(!next) CloudUpload.retryPending(this);
-                    toast(next?"הקלטות יישמרו גם במכשיר לאופליין.":"הקלטות חדשות יישמרו באתר; עותקים מקומיים יוסרו לאחר העלאה.");
-                }
+                else if(which==4) showOfflineSettings();
                 else if(which==5) showCloudConfiguration();
                 else if(which==6) refresh(true);
             }).setNegativeButton("סגור",null).show();
+    }
+
+    /** Ask whether to save offline; ask format only when Yes is selected. */
+    private void showOfflineSettings(){
+        boolean enabled=CloudUpload.keepOffline(this);
+        new AlertDialog.Builder(this).setTitle("שמירה לאופליין")
+            .setSingleChoiceItems(new String[]{"לא", "כן"},enabled?1:0,
+                    (dialog,which)->{
+                        dialog.dismiss();
+                        if(which==0){
+                            CloudUpload.setOfflineMode(this,CloudUpload.MODE_NO);
+                            toast("הקלטות חדשות יישמרו באתר בלבד, בלי עותק אופליין.");
+                        }else showOfflineFormat();
+                    })
+            .setNegativeButton("ביטול",null).show();
+    }
+
+    private void showOfflineFormat(){
+        String mode=CloudUpload.offlineMode(this);
+        new AlertDialog.Builder(this).setTitle("שמירה כ־")
+            .setSingleChoiceItems(new String[]{"וידאו עם שמע (MP4)","שמע בלבד (M4A)"},
+                    CloudUpload.MODE_AUDIO.equals(mode)?1:0,
+                    (dialog,which)->{
+                        CloudUpload.setOfflineMode(this,
+                                which==1?CloudUpload.MODE_AUDIO:CloudUpload.MODE_VIDEO);
+                        dialog.dismiss();
+                        toast(which==1?"אופליין: שמע בלבד.":"אופליין: וידאו עם שמע.");
+                    })
+            .setNegativeButton("ביטול",null).show();
     }
 
     private void showCloudConfiguration(){
@@ -169,7 +196,7 @@ public class MainActivity extends Activity {
                 }).setNegativeButton("ביטול",null).show();
     }
     private ArrayList<Catalog.Track> all(){LinkedHashMap<String,Catalog.Track> m=new LinkedHashMap<>();for(Catalog.Playlist p:playlists)for(Catalog.Track t:p.tracks){if(!m.containsKey(t.id)||t.serverAudio())m.put(t.id,t);}return new ArrayList<>(m.values());}
-    private boolean matches(Catalog.Track t){return (!hostedOnly||t.serverAudio()||CloudUpload.uploaded(this,t.id))&&(!offlineOnly||Catalog.saved(this,t)||(CloudUpload.keepOffline(this)&&RecordedAudio.saved(this,t.id)))&&t.title.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));}
+    private boolean matches(Catalog.Track t){return (!hostedOnly||t.serverAudio()||CloudUpload.uploaded(this,t.id))&&(!offlineOnly||Catalog.saved(this,t)||(CloudUpload.localAvailable(this,t.id)))&&t.title.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));}
     private void render(){
         if(rows==null||destroyed)return;rows.removeAllViews();visible.clear();
         if(selected>=playlists.size())selected=-1;
@@ -185,12 +212,17 @@ public class MainActivity extends Activity {
         ArrayList<Catalog.Track> base=selected>=0?playlists.get(selected).tracks:all();for(Catalog.Track t:base)if(matches(t))visible.add(t);
         subtitle.setText((selected>=0?playlists.get(selected).title:"כל השירים")+" · "+visible.size()+" שירים");
         if(!hostedOnly&&!offlineOnly)rows.addView(text("YouTube מתנגן בתוך האפליקציה; ייתכנו פרסומות ומגבלות השמעה ברקע.",14,MUTED));
-        rows.addView(button("נגן שיר ראשון",()->{for(Catalog.Track t:visible){if(t.serverAudio()||Catalog.saved(this,t)||RecordedAudio.saved(this,t.id)||CloudUpload.uploaded(this,t.id))start(t);else openYouTube(t);return;}toast("אין שירים זמינים ברשימה הזאת.");}));
+        rows.addView(button("נגן שיר ראשון",()->{for(Catalog.Track t:visible){if(t.serverAudio()||Catalog.saved(this,t)||CloudUpload.localAvailable(this,t.id)||CloudUpload.uploaded(this,t.id))start(t);else openYouTube(t);return;}toast("אין שירים זמינים ברשימה הזאת.");}));
         if(visible.isEmpty())rows.addView(text("אין שירים בתצוגה הזאת. נסה לשנות את החיפוש או המסננים.",16,MUTED));
         for(Catalog.Track t:visible){
-            boolean saved=Catalog.saved(this,t);boolean recorded=RecordedAudio.saved(this,t.id);boolean cloud=CloudUpload.uploaded(this,t.id);LinearLayout row=line();row.setPadding(dp(6),dp(9),dp(6),dp(9));
+            boolean saved=Catalog.saved(this,t);
+            boolean localVideo=RecordedVideo.saved(this,t.id);
+            boolean localAudio=RecordedOfflineAudio.saved(this,t.id);
+            boolean recorded=localVideo||localAudio;
+            boolean cloud=CloudUpload.uploaded(this,t.id);
+            LinearLayout row=line();row.setPadding(dp(6),dp(9),dp(6),dp(9));
             LinearLayout info=column();TextView name=text(t.title,16,Color.WHITE);name.setMaxLines(2);info.addView(name);
-            info.addView(text(cloud?(recorded?"באתר ובמכשיר · אופליין":"באתר · הנגן שלנו"):recorded?"ממתין להעלאה לאתר":saved?"במכשיר · זמין ללא אינטרנט"
+            info.addView(text(cloud?(recorded?(localAudio?"באתר · שמע אופליין":"באתר · וידאו אופליין"):"באתר · וידאו עם שמע"):recorded?"וידאו מקומי · ממתין להעלאה לאתר":saved?"במכשיר · זמין ללא אינטרנט"
                     +(AudioTrim.get(this,t)!=null&&AudioTrim.get(this,t).changed()?" · קצוות שקטים הוסרו":"")
                     :t.hosted()?"בשרת · נשמר בניגון הראשון":"YouTube · נגן מובנה (ללא שמירה אוטומטית)",
                     13,saved?0xff83d7b2:MUTED));
@@ -203,7 +235,7 @@ public class MainActivity extends Activity {
                 if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){
                     toast("עבור לשיר אחר לפני מחיקת ההקלטה.");return;
                 }
-                if(RecordedAudio.delete(this,t.id)){render();toast("ההקלטה נמחקה.");}
+                if(RecordedVideo.delete(this,t.id)&&RecordedOfflineAudio.delete(this,t.id)){render();toast("עותק האופליין נמחק.");}
                 else toast("לא ניתן למחוק את ההקלטה.");
             }));
             else if(cloud||t.cloud())row.addView(button("נגן",()->start(t)));
@@ -212,15 +244,24 @@ public class MainActivity extends Activity {
         }
     }
     private void start(Catalog.Track chosen){
+        boolean locallyVideo=RecordedVideo.saved(this,chosen.id);
+        boolean locallyAudio=RecordedOfflineAudio.saved(this,chosen.id);
+        boolean audioPreferred=CloudUpload.MODE_AUDIO.equals(CloudUpload.offlineMode(this));
+        if ((locallyVideo && !(locallyAudio && audioPreferred)) ||
+                ((CloudUpload.uploaded(this,chosen.id) || chosen.cloud()) &&
+                 !(locallyAudio && audioPreferred))) {
+            openVideo(chosen);
+            return;
+        }
         if(player==null){toast("הנגן מתחבר, נסה בעוד רגע.");return;}
         ArrayList<MediaItem> queue=new ArrayList<>();int start=0;
-        for(Catalog.Track t:visible)if(t.serverAudio()||Catalog.saved(this,t)||RecordedAudio.saved(this,t.id)||CloudUpload.uploaded(this,t.id)){
+        for(Catalog.Track t:visible)if(t.serverAudio()||Catalog.saved(this,t)||CloudUpload.localAvailable(this,t.id)||CloudUpload.uploaded(this,t.id)){
             if(t.id.equals(chosen.id))start=queue.size();
-            boolean recorded=RecordedAudio.saved(this,t.id);
+            boolean recorded=CloudUpload.localAvailable(this,t.id);
             boolean cloud=CloudUpload.uploaded(this,t.id);
             boolean local=Catalog.saved(this,t);
             MediaItem.Builder item=new MediaItem.Builder()
-                    .setMediaId(t.id).setUri(recorded?RecordedAudio.uri(this,t.id):(cloud||t.cloud())?CloudUpload.recordedRemoteUri(this,t.id):Catalog.uri(this,t))
+                    .setMediaId(t.id).setUri(recorded?CloudUpload.localPlaybackUri(this,t.id):(cloud||t.cloud())?CloudUpload.recordedRemoteUri(this,t.id):Catalog.uri(this,t))
                     .setMediaMetadata(new MediaMetadata.Builder()
                             .setTitle(t.title).setArtist("מוזיקה ללא גבולות").build());
             if(local&&!recorded){
@@ -243,10 +284,16 @@ public class MainActivity extends Activity {
         // Fetch only audio already hosted on our server, not YouTube playback.
         // The current playback streams normally while DownloadManager makes a
         // local copy. Future playback resolves to the local file.
-        if(chosen.hosted()&&!Catalog.saved(this,chosen)&&!RecordedAudio.saved(this,chosen.id)&&autoCacheEnabled()){
+        if(chosen.hosted()&&!Catalog.saved(this,chosen)&&!CloudUpload.localAvailable(this,chosen.id)&&autoCacheEnabled()){
             try{Catalog.download(this,chosen);}
             catch(Exception e){toast("לא ניתן לשמור את השיר אוטומטית כרגע.");}
         }
+    }
+    private void openVideo(Catalog.Track t){
+        if(player!=null)player.pause();
+        startActivity(new Intent(this,VideoPlaybackActivity.class)
+                .putExtra(VideoPlaybackActivity.EXTRA_ID,t.id)
+                .putExtra(VideoPlaybackActivity.EXTRA_TITLE,t.title));
     }
     private void openYouTube(Catalog.Track t){
         if(player!=null)player.pause();

@@ -6,6 +6,7 @@ on:
       - main
       - fix/embedded-playback
       - feature/auto-record-cloud-first-v15
+      - feature/video-mp4-cloud-first-v16
   pull_request:
     branches:
       - main
@@ -54,13 +55,13 @@ jobs:
             sleep 1
           done
           grep -q '"ok":true' "$RUNNER_TEMP/cloud-health.json"
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3055/api/recordings/01234567890)
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3055/api/recordings/01234567890.mp4)
           test "$code" = "401"
-          python3 -c 'import wave,sys; w=wave.open(sys.argv[1],"wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b"\x00\x00\x00\x00"*44100); w.close()' "$RUNNER_TEMP/smoke.wav"
-          curl --fail --silent --show-error -X PUT -H "Authorization: Bearer ci-only-secret" -H "Content-Type: audio/wav" --data-binary @"$RUNNER_TEMP/smoke.wav" http://127.0.0.1:3055/api/recordings/01234567890 > "$RUNNER_TEMP/upload.json"
+          python3 -c 'import struct,sys; f=open(sys.argv[1],"wb"); f.write(struct.pack(">I",24)+b"ftypisom"+struct.pack(">I",0)+b"isomiso2"+b"\x00"*8192); f.close()' "$RUNNER_TEMP/smoke.mp4"
+          curl --fail --silent --show-error -X PUT -H "Authorization: Bearer ci-only-secret" -H "Content-Type: video/mp4" --data-binary @"$RUNNER_TEMP/smoke.mp4" http://127.0.0.1:3055/api/recordings/01234567890.mp4 > "$RUNNER_TEMP/upload.json"
           grep -q '"ok":true' "$RUNNER_TEMP/upload.json"
-          curl --fail --silent --show-error -H "Authorization: Bearer ci-only-secret" -H "Range: bytes=0-43" http://127.0.0.1:3055/api/recordings/01234567890 -o "$RUNNER_TEMP/returned-header.bin"
-          cmp "$RUNNER_TEMP/returned-header.bin" <(head -c 44 "$RUNNER_TEMP/smoke.wav")
+          curl --fail --silent --show-error -H "Authorization: Bearer ci-only-secret" -H "Range: bytes=0-23" http://127.0.0.1:3055/api/recordings/01234567890.mp4 -o "$RUNNER_TEMP/returned-header.bin"
+          cmp "$RUNNER_TEMP/returned-header.bin" <(head -c 24 "$RUNNER_TEMP/smoke.mp4")
       - name: Compile and assemble test APK
         working-directory: android
         run: |

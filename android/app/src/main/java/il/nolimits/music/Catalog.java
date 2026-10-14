@@ -16,7 +16,7 @@ final class Catalog {
         final String id,title,src;
         Track(JSONObject o){ id=o.optString("youtubeId"); title=o.optString("title",id); src=o.optString("src",""); }
         boolean hosted(){return src.equals("media/"+id+".mp3") && id.matches("[A-Za-z0-9_-]{11}");}
-        boolean cloud(){return src.equals("cloud/"+id+".wav") && id.matches("[A-Za-z0-9_-]{11}");}
+        boolean cloud(){return src.equals("cloud/"+id+".mp4") && id.matches("[A-Za-z0-9_-]{11}");}
         boolean serverAudio(){return hosted()||cloud();}
     }
     static final class Playlist {

@@ -19,7 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Uploads completed, user-consented audio recordings to the configured
+ * Uploads completed, user-consented screen videos with audio to the configured
  * authenticated cloud service. A private staging file survives failures so
  * no recording is falsely reported as stored online.
  */
@@ -27,7 +27,12 @@ final class CloudUpload {
     static final String PREFS = "cloud_storage_settings";
     static final String ENDPOINT = "cloud_endpoint";
     static final String TOKEN = "cloud_access_token";
+    // Offline saving is one tri-state preference; video is the legacy enabled format.
     static final String KEEP_OFFLINE = "keep_recording_offline";
+    static final String OFFLINE_MODE = "offline_recording_mode";
+    static final String MODE_NO = "none";
+    static final String MODE_AUDIO = "audio";
+    static final String MODE_VIDEO = "video";
     static final String ACTION_STATUS = "il.nolimits.music.CLOUD_STATUS";
     static final String EXTRA_ID = "cloud_track_id";
     static final String EXTRA_OK = "cloud_success";
@@ -39,8 +44,34 @@ final class CloudUpload {
         return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
+    static String offlineMode(Context c) {
+        String mode=prefs(c).getString(OFFLINE_MODE,null);
+        if (MODE_NO.equals(mode) || MODE_AUDIO.equals(mode) || MODE_VIDEO.equals(mode))
+            return mode;
+        return prefs(c).getBoolean(KEEP_OFFLINE,false) ? MODE_VIDEO : MODE_NO;
+    }
+
+    static void setOfflineMode(Context c,String mode) {
+        if (!MODE_NO.equals(mode) && !MODE_AUDIO.equals(mode) && !MODE_VIDEO.equals(mode))
+            throw new IllegalArgumentException("Bad offline mode");
+        prefs(c).edit().putString(OFFLINE_MODE,mode).remove(KEEP_OFFLINE).apply();
+    }
+
     static boolean keepOffline(Context c) {
-        return prefs(c).getBoolean(KEEP_OFFLINE, false);
+        return !MODE_NO.equals(offlineMode(c));
+    }
+
+    static boolean localAvailable(Context c,String id) {
+        return RecordedOfflineAudio.saved(c,id)||RecordedVideo.saved(c,id);
+    }
+
+    static Uri localPlaybackUri(Context c,String id) {
+        // A freshly recorded MP4 can be a pending upload; favor the user's
+        // requested offline format when both files happen to exist.
+        if (MODE_AUDIO.equals(offlineMode(c)) && RecordedOfflineAudio.saved(c,id))
+            return RecordedOfflineAudio.uri(c,id);
+        if (RecordedVideo.saved(c,id)) return RecordedVideo.uri(c,id);
+        return RecordedOfflineAudio.uri(c,id);
     }
 
     static String baseUrl(Context c) {
@@ -54,11 +85,11 @@ final class CloudUpload {
     }
 
     static boolean uploaded(Context c, String id) {
-        return prefs(c).getBoolean("uploaded_" + id, false);
+        return prefs(c).getBoolean("video_uploaded_" + id, false);
     }
 
     static Uri recordedRemoteUri(Context c, String id) {
-        return Uri.parse(baseUrl(c) + "api/recordings/" + id);
+        return Uri.parse(baseUrl(c) + "api/recordings/" + id + ".mp4");
     }
 
     static void enqueue(Context c, String id) {
@@ -70,14 +101,18 @@ final class CloudUpload {
     static void retryPending(Context c) {
         Context app = c.getApplicationContext();
         WORKER.execute(() -> {
-            File dir = RecordedAudio.folder(app);
-            File[] recordings = dir.listFiles((d,name) -> name.endsWith(".wav"));
+            File dir = RecordedVideo.folder(app);
+            File[] recordings = dir.listFiles((d,name) -> name.endsWith(".mp4"));
             if (recordings == null) return;
             for (File f : recordings) {
                 String id = f.getName().substring(0, f.getName().length() - 4);
                 if (!id.matches("[A-Za-z0-9_-]{11}")) continue;
                 if (!uploaded(app,id)) upload(app,id);
-                else if (!keepOffline(app)) RecordedAudio.delete(app,id);
+                else try {
+                    applyRetention(app,id);
+                } catch (IOException e) {
+                    Log.w(LOG,"Could not finalize offline format",e);
+                }
             }
         });
     }
@@ -85,7 +120,7 @@ final class CloudUpload {
     static String authToken(Context c) { return prefs(c).getString(TOKEN, ""); }
 
     private static void upload(Context c, String id) {
-        if (!RecordedAudio.saved(c, id)) return;
+        if (!RecordedVideo.saved(c, id)) return;
         String token = authToken(c);
         if (token.isEmpty()) {
             report(c,id,false,"ממתינה להגדרת הרשאת העלאה לשרת. הקובץ הזמני נשמר עד אז.");
@@ -93,8 +128,8 @@ final class CloudUpload {
         }
         HttpURLConnection connection = null;
         try {
-            File file = RecordedAudio.song(c,id);
-            URL url = new URL(baseUrl(c) + "api/recordings/" + id);
+            File file = RecordedVideo.song(c,id);
+            URL url = new URL(baseUrl(c) + "api/recordings/" + id + ".mp4");
             if (!"https".equalsIgnoreCase(url.getProtocol()))
                 throw new IOException("Upload requires HTTPS");
             connection = (HttpURLConnection) url.openConnection();
@@ -103,7 +138,7 @@ final class CloudUpload {
             connection.setReadTimeout(90000);
             connection.setDoOutput(true);
             connection.setRequestProperty("Authorization", "Bearer " + token);
-            connection.setRequestProperty("Content-Type", "audio/wav");
+            connection.setRequestProperty("Content-Type", "video/mp4");
             connection.setRequestProperty("X-Track-Id", id);
             connection.setFixedLengthStreamingMode(file.length());
             try (InputStream input = new FileInputStream(file);
@@ -118,15 +153,46 @@ final class CloudUpload {
                 throw new IOException("שרת ההקלטות החזיר שגיאה " + status);
 
             // Mark uploaded only after the server acknowledged a complete write.
-            prefs(c).edit().putBoolean("uploaded_"+id,true).apply();
-            if (!keepOffline(c)) RecordedAudio.delete(c,id);
-            report(c,id,true,"השיר נשמר באתר" + (keepOffline(c)?" וגם במכשיר":""));
+            prefs(c).edit().putBoolean("video_uploaded_"+id,true).apply();
+            String localResult;
+            try {
+                localResult=applyRetention(c,id);
+            } catch (IOException extractionError) {
+                Log.w(LOG,"Cloud upload succeeded but offline processing failed",extractionError);
+                // Keep the source MP4 so offline audio can be retried safely.
+                localResult="; עיבוד עותק האופליין נכשל, המקור נשמר זמנית";
+            }
+            report(c,id,true,"הווידאו והשמע נשמרו באתר" + localResult);
         } catch (Exception e) {
             Log.w(LOG,"Cloud upload failed for "+id,e);
             report(c,id,false,"השמירה באתר טרם הושלמה; הקובץ נשמר זמנית להעלאה חוזרת.");
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    /** Only delete the staged MP4 after the server has acknowledged upload. */
+    private static String applyRetention(Context c,String id) throws IOException {
+        String mode=offlineMode(c);
+        if (MODE_VIDEO.equals(mode)) {
+            // Preserves the captured video with audio for offline replay.
+            return "; עותק וידאו שמור במכשיר";
+        }
+        if (MODE_AUDIO.equals(mode)) {
+            File video=RecordedVideo.song(c,id);
+            if (!RecordedOfflineAudio.saved(c,id)) {
+                if (!video.isFile()) throw new IOException("No MP4 available for audio extraction");
+                RecordedOfflineAudio.extract(c,id,video);
+            }
+            if (!RecordedOfflineAudio.saved(c,id))
+                throw new IOException("Offline audio was not created");
+            if (!RecordedVideo.delete(c,id))
+                Log.w(LOG,"Unable to remove video after extracting M4A");
+            return "; עותק שמע בלבד שמור במכשיר";
+        }
+        if (!RecordedVideo.delete(c,id))
+            Log.w(LOG,"Unable to remove uploaded MP4 staging file");
+        return "; ללא עותק אופליין";
     }
 
     private static void report(Context c,String id,boolean ok,String text) {

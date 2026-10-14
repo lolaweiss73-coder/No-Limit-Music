@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * User-approved projection: temporary whole-screen video + eligible internal
- * playback audio. The private temporary video is deleted after extracting WAV.
+ * playback audio. Encodes an MP4 combining the video and AAC sound.
  * Never bypasses Android playback-capture policy or protected surfaces.
  */
 public final class CaptureService extends Service {
@@ -58,6 +58,7 @@ public final class CaptureService extends Service {
     private volatile boolean recording;
     private volatile String audioFailure;
     private volatile boolean initialized;
+    private long screenStartNanos, audioStartNanos;
     private final AtomicBoolean stopping = new AtomicBoolean(false);
 
     @Override public void onCreate() {
@@ -100,6 +101,7 @@ public final class CaptureService extends Service {
             initializePlaybackAudio();
 
             recording = true;
+            audioStartNanos = System.nanoTime();
             audioRecord.startRecording();
             if (audioRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING)
                 throw new IllegalStateException("Android could not start playback capture");
@@ -125,7 +127,7 @@ public final class CaptureService extends Service {
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_music)
                 .setContentTitle("מוזיקה ללא גבולות · הקלטה פעילה")
-                .setContentText("מצלם את המסך ולוכד שמע פנימי שמותר ללכוד")
+                .setContentText("מקליט וידאו ושמע פנימי לקובץ MP4")
                 .setContentIntent(pendingOpen)
                 .setOngoing(true)
                 .addAction(android.R.drawable.ic_media_pause, "עצור ושמור", pendingStop)
@@ -158,6 +160,7 @@ public final class CaptureService extends Service {
                 screenRecorder.getSurface(), null, new Handler(Looper.getMainLooper()));
         if (virtualDisplay == null) throw new IOException("Cannot start screen capture");
         screenRecorder.start();
+        screenStartNanos = System.nanoTime();
     }
 
     private void initializePlaybackAudio() throws IOException {
@@ -246,17 +249,19 @@ public final class CaptureService extends Service {
             if (temporaryAudio == null || !temporaryAudio.isFile())
                 throw new IOException("לא התקבלה הקלטת שמע");
 
-            RecordedAudio.Result result = RecordedAudio.finish(this, songId, temporaryAudio);
+            RecordedVideo.Result result = RecordedVideo.finish(this, songId,
+                    temporaryVideo, temporaryAudio,
+                    Math.max(0L,(audioStartNanos-screenStartNanos)/1000000L));
             // The file is only a private upload staging copy by default.
             // Keep it offline permanently only when the user opted in.
             sendEvent(FINISHED, true, "ההקלטה הסתיימה (" + result.durationMs / 1000
-                    + " שניות). מעבירה את השיר לאתר…");
+                    + " שניות). מעלה את הווידאו והשמע לאתר…");
             CloudUpload.enqueue(this, songId);
         } catch (Exception ex) {
             Log.w(TAG, "Capture did not produce usable audio", ex);
             sendEvent(FINISHED, false, ex.getMessage() == null ? "לא ניתן לשמור את ההקלטה" : ex.getMessage());
         } finally {
-            if (temporaryVideo != null) temporaryVideo.delete(); // do not retain screen/chat contents
+            if (temporaryVideo != null) temporaryVideo.delete(); // private temporary video is removed after MP4 composition
             if (temporaryAudio != null) temporaryAudio.delete();
             if (virtualDisplay != null) virtualDisplay.release();
             if (screenRecorder != null) {
