@@ -43,6 +43,7 @@ public final class YouTubePlayerActivity extends Activity {
     private String trackId;
     private boolean capturing;
     private boolean restartPending;
+    private boolean screenResumed;
     private boolean receiverRegistered;
     private final BroadcastReceiver captureEvents = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -238,10 +239,13 @@ public final class YouTubePlayerActivity extends Activity {
     }
 
     private void restartForCapture() {
-        if (!restartPending || web == null) return;
+        if (!restartPending || web == null || !screenResumed) return;
         restartPending = false;
         web.onResume();
-        web.evaluateJavascript("window.restartPlayback && window.restartPlayback()", null);
+        web.postDelayed(() -> {
+            if (web != null && !isFinishing()) web.evaluateJavascript(
+                    "window.restartPlayback && window.restartPlayback()", null);
+        }, 150);
     }
 
     private void stopCapture() {
@@ -256,6 +260,7 @@ public final class YouTubePlayerActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        screenResumed = false;
         if (web != null) {
             web.evaluateJavascript("window.pausePlayback && window.pausePlayback()", null);
             web.onPause();
@@ -265,6 +270,7 @@ public final class YouTubePlayerActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        screenResumed = true;
         if (web != null) web.onResume();
         if (restartPending) restartForCapture();
     }
