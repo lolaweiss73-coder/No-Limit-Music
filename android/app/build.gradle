@@ -3,6 +3,15 @@ android {
     namespace 'il.nolimits.music'
     compileSdk 35
     defaultConfig { applicationId 'il.nolimits.music'; minSdk 26; targetSdk 35; versionCode 6; versionName '1.5.0' }
+    buildTypes {
+        debug {
+            applicationIdSuffix '.dev'
+            resValue 'string', 'app_label', 'מוזיקה ללא גבולות · בדיקה'
+        }
+        release {
+            resValue 'string', 'app_label', 'מוזיקה ללא גבולות'
+        }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies {
