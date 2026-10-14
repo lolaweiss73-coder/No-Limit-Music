@@ -33,7 +33,26 @@ public class MainActivity extends Activity {
     private int selected=-1; private boolean hostedOnly=false,offlineOnly=false,dragging=false;
     private String query="";private boolean destroyed=false;
     private final Runnable ticker=new Runnable(){public void run(){updatePlayer();handler.postDelayed(this,700);}};
-    private final BroadcastReceiver downloads=new BroadcastReceiver(){public void onReceive(Context c,Intent i){render();}};
+    private static final String CACHE_SETTINGS = "playback_cache_settings";
+    private static final String AUTO_CACHE = "save_on_first_play";
+    private final BroadcastReceiver downloads=new BroadcastReceiver(){
+        public void onReceive(Context c,Intent i){
+            long downloadId=i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID,-1L);
+            if(downloadId>=0) for(Catalog.Playlist p:playlists){
+                for(Catalog.Track t:p.tracks){
+                    if(Catalog.downloadId(MainActivity.this,t)==downloadId){
+                        AudioTrim.inspectAsync(MainActivity.this,t);
+                        render();
+                        return;
+                    }
+                }
+            }
+            render();
+        }
+    };
+    private boolean autoCacheEnabled(){
+        return getSharedPreferences(CACHE_SETTINGS,0).getBoolean(AUTO_CACHE,true);
+    }
     @Override public void onCreate(Bundle state){
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         if(state!=null){selected=state.getInt("selected",-1);query=state.getString("query","");hostedOnly=state.getBoolean("hosted",false);offlineOnly=state.getBoolean("offline",false);}
@@ -46,6 +65,16 @@ public class MainActivity extends Activity {
             if(destroyed)return;player=future.get();
             player.addListener(new Player.Listener(){
                 @Override public void onEvents(Player p,Player.Events e){updatePlayer();}
+                @Override public void onMediaItemTransition(MediaItem item,int reason){
+                    if(item==null||!autoCacheEnabled())return;
+                    for(Catalog.Playlist list:playlists)for(Catalog.Track t:list.tracks){
+                        if(t.id.equals(item.mediaId)){
+                            if(t.hosted()&&!Catalog.saved(MainActivity.this,t))
+                                try{Catalog.download(MainActivity.this,t);}catch(Exception ignored){}
+                            return;
+                        }
+                    }
+                }
                 @Override public void onPlayerError(PlaybackException e){toast("השיר לא זמין כרגע. בדוק חיבור או עבור לשיר הבא.");}
             });updatePlayer();
         }catch(Exception e){toast("הנגן לא התחבר. סגור ופתח שוב את האפליקציה.");}},command->handler.post(command));
@@ -84,10 +113,19 @@ public class MainActivity extends Activity {
     }
     private void showSettings(){
         boolean disabled=getSharedPreferences(IntroActivity.PREFS,0).getBoolean(IntroActivity.DISABLED,false);
-        new AlertDialog.Builder(this).setTitle("הגדרות · קליפ הפתיחה")
-            .setItems(new String[]{"הפעל שוב את קליפ הפתיחה","אפס את ההעדפה והחזר את הקליפ לפתיחה הבאה",disabled?"מצב נוכחי: הקליפ כבוי בפתיחה":"מצב נוכחי: הקליפ פעיל בפתיחה"},(d,which)->{
+        new AlertDialog.Builder(this).setTitle("הגדרות · מוזיקה ללא גבולות")
+            .setItems(new String[]{"הפעל שוב את קליפ הפתיחה",
+                    "אפס את ההעדפה והחזר את הקליפ לפתיחה הבאה",
+                    disabled?"מצב הקליפ: כבוי בפתיחה":"מצב הקליפ: פעיל בפתיחה",
+                    autoCacheEnabled()?"שמירה אוטומטית בניגון ראשון: פעילה (לחץ לכיבוי)"
+                            :"שמירה אוטומטית בניגון ראשון: כבויה (לחץ להפעלה)"},(d,which)->{
                 if(which==0){if(player!=null)player.pause();startActivity(new Intent(this,IntroActivity.class).putExtra(IntroActivity.REPLAY,true));}
                 else if(which==1){getSharedPreferences(IntroActivity.PREFS,0).edit().remove(IntroActivity.DISABLED).apply();toast("קליפ הפתיחה יופעל בפתיחה הבאה של האפליקציה.");}
+                else if(which==3){
+                    boolean next=!autoCacheEnabled();
+                    getSharedPreferences(CACHE_SETTINGS,0).edit().putBoolean(AUTO_CACHE,next).apply();
+                    toast(next?"שמירת שירים מהשרת בניגון ראשון הופעלה.":"שמירה אוטומטית כובתה.");
+                }
             }).setNegativeButton("סגור",null).show();
     }
     private ArrayList<Catalog.Track> all(){LinkedHashMap<String,Catalog.Track> m=new LinkedHashMap<>();for(Catalog.Playlist p:playlists)for(Catalog.Track t:p.tracks){if(!m.containsKey(t.id)||t.hosted())m.put(t.id,t);}return new ArrayList<>(m.values());}
@@ -112,7 +150,10 @@ public class MainActivity extends Activity {
         for(Catalog.Track t:visible){
             boolean saved=Catalog.saved(this,t);LinearLayout row=line();row.setPadding(dp(6),dp(9),dp(6),dp(9));
             LinearLayout info=column();TextView name=text(t.title,16,Color.WHITE);name.setMaxLines(2);info.addView(name);
-            info.addView(text(saved?"במכשיר · זמין ללא אינטרנט":t.hosted()?"בשרת · ללא פרסומות":"YouTube · נגן מובנה",13,saved?0xff83d7b2:MUTED));
+            info.addView(text(saved?"במכשיר · זמין ללא אינטרנט"
+                    +(AudioTrim.get(this,t)!=null&&AudioTrim.get(this,t).changed()?" · קצוות שקטים הוסרו":"")
+                    :t.hosted()?"בשרת · נשמר בניגון הראשון":"YouTube · נגן מובנה (ללא שמירה אוטומטית)",
+                    13,saved?0xff83d7b2:MUTED));
             info.setOnClickListener(v->{if(t.hosted()||saved)start(t);else openYouTube(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             if(t.hosted())row.addView(button(saved?"מחק":"שמור",()->{if(Catalog.saved(this,t)){
                 new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;}((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).remove(Catalog.downloadId(this,t));Catalog.local(this,t).delete();getSharedPreferences("downloads",0).edit().remove(t.id).apply();render();}).setNegativeButton("ביטול",null).show();
@@ -126,9 +167,35 @@ public class MainActivity extends Activity {
         ArrayList<MediaItem> queue=new ArrayList<>();int start=0;
         for(Catalog.Track t:visible)if(t.hosted()||Catalog.saved(this,t)){
             if(t.id.equals(chosen.id))start=queue.size();
-            queue.add(new MediaItem.Builder().setMediaId(t.id).setUri(Catalog.uri(this,t)).setMediaMetadata(new MediaMetadata.Builder().setTitle(t.title).setArtist("מוזיקה ללא גבולות").build()).build());
+            boolean local=Catalog.saved(this,t);
+            MediaItem.Builder item=new MediaItem.Builder()
+                    .setMediaId(t.id).setUri(Catalog.uri(this,t))
+                    .setMediaMetadata(new MediaMetadata.Builder()
+                            .setTitle(t.title).setArtist("מוזיקה ללא גבולות").build());
+            if(local){
+                AudioTrim.Bounds trim=AudioTrim.get(this,t);
+                if(trim==null) AudioTrim.inspectAsync(this,t);
+                else if(trim.changed()){
+                    MediaItem.ClippingConfiguration.Builder clipping =
+                            new MediaItem.ClippingConfiguration.Builder()
+                                    .setStartPositionMs(trim.startMs);
+                    if(trim.endMs>=0)clipping.setEndPositionMs(trim.endMs);
+                    item.setClippingConfiguration(clipping.build());
+                }
+            }
+            queue.add(item.build());
         }
-        if(queue.isEmpty())return;player.setMediaItems(queue,start,0);player.prepare();player.play();
+        if(queue.isEmpty())return;
+        player.setMediaItems(queue,start,0);
+        player.prepare();
+        player.play();
+        // Fetch only audio already hosted on our server, not YouTube playback.
+        // The current playback streams normally while DownloadManager makes a
+        // local copy. Future playback resolves to the local file.
+        if(chosen.hosted()&&!Catalog.saved(this,chosen)&&autoCacheEnabled()){
+            try{Catalog.download(this,chosen);}
+            catch(Exception e){toast("לא ניתן לשמור את השיר אוטומטית כרגע.");}
+        }
     }
     private void openYouTube(Catalog.Track t){
         if(player!=null)player.pause();
