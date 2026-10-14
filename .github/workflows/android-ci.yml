@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/embedded-playback
+      - feature/auto-record-cloud-first-v15
   pull_request:
     branches:
       - main
