@@ -19,6 +19,11 @@
   window.pausePlayback=function(){
     if(player && player.pauseVideo) player.pauseVideo();
   };
+  window.restartPlayback=function(){
+    if(!player || !player.seekTo){signal('blocked');return;}
+    player.seekTo(0, true);
+    player.playVideo();
+  };
   window.togglePlayback=function(){
     if(!player || !player.getPlayerState){ signal('blocked'); return; }
     if(player.getPlayerState()===1) player.pauseVideo();
