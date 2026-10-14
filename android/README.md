@@ -1,4 +1,4 @@
-# מוזיקה ללא גבולות — Android source (1.2.0)
+# מוזיקה ללא גבולות — Android source (1.3.0)
 
 Native Android application backed by the existing public music catalog at https://avi-music-player.lolaweiss73.chatgpt.site/ . The existing website is unchanged.
 
@@ -45,3 +45,12 @@ Official implementation reference: https://developer.android.com/media/media3/se
 - Still to test: actual YouTube IFrame playback and autoplay restrictions on an Android phone, intro completion, playlist interaction, offline MP3s and downloads.
 - YouTube-only media can still contain advertisements and impose playback restrictions. No downloading, recording, ad removal or server import from YouTube is implemented.
 - The signing keystore used by the currently installed APK is required for an in-place update. Creating a new signing key would require uninstalling the older signed app.
+
+## 1.3.0 — authorized first-play local saving
+- For audio files served by the app's authorized MP3 server, playback now starts a parallel Android DownloadManager job on first play.
+- Later playback uses the downloaded local file, if complete. The user can turn this feature off in settings or delete a saved track.
+- A background MediaCodec job analyzes local audio for significant silence at its edges. Playback uses Media3 clipping bounds after analysis, without modifying the MP3.
+- The heuristic only removes substantial silence, not speech or embedded introductions.
+- YouTube IFrame playback is separate and does not provide local audio copies through this feature.
+- Android versionCode 4 (1.3.0), application ID unchanged.
+- Requires device tests and release signing before distribution.
