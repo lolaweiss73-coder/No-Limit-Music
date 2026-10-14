@@ -244,6 +244,15 @@ public class MainActivity extends Activity {
         }
     }
     private void start(Catalog.Track chosen){
+        boolean locallyVideo=RecordedVideo.saved(this,chosen.id);
+        boolean locallyAudio=RecordedOfflineAudio.saved(this,chosen.id);
+        boolean audioPreferred=CloudUpload.MODE_AUDIO.equals(CloudUpload.offlineMode(this));
+        if ((locallyVideo && !(locallyAudio && audioPreferred)) ||
+                ((CloudUpload.uploaded(this,chosen.id) || chosen.cloud()) &&
+                 !(locallyAudio && audioPreferred))) {
+            openVideo(chosen);
+            return;
+        }
         if(player==null){toast("הנגן מתחבר, נסה בעוד רגע.");return;}
         ArrayList<MediaItem> queue=new ArrayList<>();int start=0;
         for(Catalog.Track t:visible)if(t.serverAudio()||Catalog.saved(this,t)||CloudUpload.localAvailable(this,t.id)||CloudUpload.uploaded(this,t.id)){
@@ -279,6 +288,12 @@ public class MainActivity extends Activity {
             try{Catalog.download(this,chosen);}
             catch(Exception e){toast("לא ניתן לשמור את השיר אוטומטית כרגע.");}
         }
+    }
+    private void openVideo(Catalog.Track t){
+        if(player!=null)player.pause();
+        startActivity(new Intent(this,VideoPlaybackActivity.class)
+                .putExtra(VideoPlaybackActivity.EXTRA_ID,t.id)
+                .putExtra(VideoPlaybackActivity.EXTRA_TITLE,t.title));
     }
     private void openYouTube(Catalog.Track t){
         if(player!=null)player.pause();
