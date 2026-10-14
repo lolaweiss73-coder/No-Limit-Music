@@ -1,4 +1,4 @@
-# מוזיקה ללא גבולות — Android source (1.5.0)
+# מוזיקה ללא גבולות — Android source (1.6.0)
 
 Native Android application backed by the existing public music catalog at https://avi-music-player.lolaweiss73.chatgpt.site/ . The existing website is unchanged.
 
@@ -84,3 +84,12 @@ production-signed app, without uninstalling or overwriting its data.
 This suffix applies ONLY to Debug; the Release applicationId remains
 `il.nolimits.music`. Production upgrade still requires the original
 release signing key. The two app installations have independent local data.
+
+## 1.6.0 — video-first MP4 capture and optional audio-only offline
+- The existing Android MediaProjection pipeline now combines temporary H.264 video with internally captured AAC audio and saves MP4 before cloud upload. The separate temporary screen recording and PCM audio are deleted after processing.
+- Cloud storage remains video-with-audio (MP4) for every successful recording.
+- Settings: "שמירה לאופליין" → No / Yes. When Yes: "שמירה כ־" → "וידאו עם שמע (MP4)" or "שמע בלבד (M4A)". Defaults to No.
+- After confirmed cloud upload, Yes+Audio extracts an M4A audio track from the recorded MP4 (lossless stream copy, no audio re-encoding), then removes the local MP4. Yes+Video retains MP4. No removes the local recording.
+- Any incomplete upload retains the MP4 privately for retry, regardless of offline preference; server acknowledgement is required before removing it.
+- Added a Media3 PlayerView activity so video recordings (online or local) display pictures with sound. Audio-only M4A uses the original audio player.
+- No server deployment or device capture verification has occurred; capture of YouTube WebView audio or video cannot be guaranteed on all Android devices.
