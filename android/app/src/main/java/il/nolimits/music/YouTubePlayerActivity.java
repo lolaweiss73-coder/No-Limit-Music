@@ -132,6 +132,9 @@ public final class YouTubePlayerActivity extends Activity {
                                 CloudUpload.enqueue(YouTubePlayerActivity.this, trackId);
                             } else if (CloudUpload.uploaded(YouTubePlayerActivity.this, trackId)) {
                                 status.setText("השיר כבר שמור באתר.");
+                            } else if (!CloudUpload.configured(YouTubePlayerActivity.this)
+                                    && !CloudUpload.keepOffline(YouTubePlayerActivity.this)) {
+                                status.setText("שרת ההקלטות עוד לא חובר. ניתן להאזין כרגיל; לא נוצרת הקלטה שתיתקע במכשיר.");
                             } else requestAudioPermission();
                         }
                     }
