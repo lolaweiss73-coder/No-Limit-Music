@@ -4,12 +4,15 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-    <application android:label="מוזיקה ללא גבולות" android:icon="@drawable/ic_music" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:usesCleartextTraffic="false">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <application android:label="מוזיקה ללא גבולות" android:icon="@drawable/ic_music" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:allowAudioPlaybackCapture="true" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="false"/>
         <activity android:name=".YouTubePlayerActivity" android:exported="false"/>
         <activity android:name=".IntroActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
+        <service android:name=".CaptureService" android:exported="false" android:foregroundServiceType="mediaProjection"/>
         <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback">
             <intent-filter><action android:name="androidx.media3.session.MediaSessionService"/></intent-filter>
         </service>
