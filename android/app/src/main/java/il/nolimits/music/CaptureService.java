@@ -247,8 +247,11 @@ public final class CaptureService extends Service {
                 throw new IOException("לא התקבלה הקלטת שמע");
 
             RecordedAudio.Result result = RecordedAudio.finish(this, songId, temporaryAudio);
-            sendEvent(FINISHED, true, "השיר נשמר במכשיר (" + result.durationMs / 1000
-                    + " שניות). קצוות שקטים הוסרו כאשר נמצאו.");
+            // The file is only a private upload staging copy by default.
+            // Keep it offline permanently only when the user opted in.
+            sendEvent(FINISHED, true, "ההקלטה הסתיימה (" + result.durationMs / 1000
+                    + " שניות). מעבירה את השיר לאתר…");
+            CloudUpload.enqueue(this, songId);
         } catch (Exception ex) {
             Log.w(TAG, "Capture did not produce usable audio", ex);
             sendEvent(FINISHED, false, ex.getMessage() == null ? "לא ניתן לשמור את ההקלטה" : ex.getMessage());

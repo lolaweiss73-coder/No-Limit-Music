@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/embedded-playback
+      - feature/auto-record-cloud-first-v15
   pull_request:
     branches:
       - main
@@ -39,6 +40,27 @@ jobs:
           echo "$SDK_DIR/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           printf "y\\n%.0s" {1..40} | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses >/dev/null
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Check cloud service JavaScript syntax
+        run: node --check server/server.mjs
+      - name: Cloud server HTTP smoke check
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3055 DATA_DIR="$RUNNER_TEMP/no-limit-cloud-ci" UPLOAD_TOKEN=ci-only-secret node server/server.mjs &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in {1..15}; do
+            if curl --fail --silent http://127.0.0.1:3055/healthz > "$RUNNER_TEMP/cloud-health.json"; then break; fi
+            sleep 1
+          done
+          grep -q '"ok":true' "$RUNNER_TEMP/cloud-health.json"
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3055/api/recordings/01234567890)
+          test "$code" = "401"
+          python3 -c 'import wave,sys; w=wave.open(sys.argv[1],"wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b"\x00\x00\x00\x00"*44100); w.close()' "$RUNNER_TEMP/smoke.wav"
+          curl --fail --silent --show-error -X PUT -H "Authorization: Bearer ci-only-secret" -H "Content-Type: audio/wav" --data-binary @"$RUNNER_TEMP/smoke.wav" http://127.0.0.1:3055/api/recordings/01234567890 > "$RUNNER_TEMP/upload.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/upload.json"
+          curl --fail --silent --show-error -H "Authorization: Bearer ci-only-secret" -H "Range: bytes=0-43" http://127.0.0.1:3055/api/recordings/01234567890 -o "$RUNNER_TEMP/returned-header.bin"
+          cmp "$RUNNER_TEMP/returned-header.bin" <(head -c 44 "$RUNNER_TEMP/smoke.wav")
       - name: Compile and assemble test APK
         working-directory: android
         run: |

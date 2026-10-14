@@ -44,22 +44,27 @@ public final class YouTubePlayerActivity extends Activity {
     private boolean capturing;
     private boolean restartPending;
     private boolean screenResumed;
+    private boolean captureRequested;
     private boolean receiverRegistered;
     private final BroadcastReceiver captureEvents = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (!trackId.equals(intent.getStringExtra(CaptureService.EXTRA_ID))) return;
             String action = intent.getAction();
             String message = intent.getStringExtra(CaptureService.EXTRA_DETAILS);
+            if (CloudUpload.ACTION_STATUS.equals(action)) {
+                status.setText(message);
+                return;
+            }
             if (CaptureService.READY.equals(action)) {
                 capturing = true;
+                capture.setVisibility(View.VISIBLE);
                 capture.setText("עצור ושמור");
                 status.setText(message);
                 restartPending = true;
                 restartForCapture();
             } else if (CaptureService.FINISHED.equals(action)) {
                 capturing = false;
-                capture.setText(RecordedAudio.saved(YouTubePlayerActivity.this, trackId)
-                        ? "הקלטה שמורה ✓" : "הקלט ושמור שמע");
+                capture.setVisibility(View.GONE);
                 status.setText(message);
             }
         }
@@ -118,7 +123,21 @@ public final class YouTubePlayerActivity extends Activity {
                     else if ("ended".equals(event)) { status.setText("השיר הסתיים"); if (capturing) stopCapture(); }
                     else if ("blocked".equals(event)) status.setText("הניגון האוטומטי נחסם; לחץ על נגן.");
                     else if ("error".equals(event)) status.setText("השיר אינו זמין בנגן המובנה. ייתכן שבעליו חסם הטמעה.");
-                    else if ("ready".equals(event)) status.setText("הנגן מוכן");
+                    else if ("ready".equals(event)) {
+                        status.setText("הנגן מוכן · מכינה הקלטה אוטומטית");
+                        if (!captureRequested) {
+                            captureRequested = true;
+                            if (RecordedAudio.saved(YouTubePlayerActivity.this, trackId)) {
+                                status.setText("קיימת הקלטה מקומית שממתינה להעלאה.");
+                                CloudUpload.enqueue(YouTubePlayerActivity.this, trackId);
+                            } else if (CloudUpload.uploaded(YouTubePlayerActivity.this, trackId)) {
+                                status.setText("השיר כבר שמור באתר.");
+                            } else if (!CloudUpload.configured(YouTubePlayerActivity.this)
+                                    && !CloudUpload.keepOffline(YouTubePlayerActivity.this)) {
+                                status.setText("שרת ההקלטות עוד לא חובר. ניתן להאזין כרגיל; לא נוצרת הקלטה שתיתקע במכשיר.");
+                            } else requestAudioPermission();
+                        }
+                    }
                     return true;
                 }
                 // Never open an external browser as a side effect of selecting a track.
@@ -141,17 +160,16 @@ public final class YouTubePlayerActivity extends Activity {
 
         capture = new Button(this);
         capture.setAllCaps(false);
-        capture.setText(RecordedAudio.saved(this, trackId)
-                ? "הקלטה שמורה ✓" : "הקלט את המסך ושמור שמע");
-        capture.setOnClickListener(v -> {
-            if (capturing) stopCapture();
-            else if (!RecordedAudio.saved(this, trackId)) requestAudioPermission();
-            else Toast.makeText(this, "השיר כבר שמור. אפשר לנגן אותו מהספרייה.", Toast.LENGTH_LONG).show();
-        });
+        capture.setText("עצור ושמור");
+        capture.setVisibility(View.GONE);
+        // The user never needs to press Record. This button is only an
+        // emergency/manual stop once Android has approved and started capture.
+        capture.setOnClickListener(v -> { if (capturing) stopCapture(); });
         root.addView(capture);
         IntentFilter filter = new IntentFilter();
         filter.addAction(CaptureService.READY);
         filter.addAction(CaptureService.FINISHED);
+        filter.addAction(CloudUpload.ACTION_STATUS);
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(captureEvents, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -166,7 +184,7 @@ public final class YouTubePlayerActivity extends Activity {
         root.addView(close);
 
         TextView note = new TextView(this);
-        note.setText("הקלטה דורשת אישור Android בכל הפעלה. רק שמע שמערכת ההפעלה מתירה ללכוד יישמר. צילום המסך הזמני נמחק בסיום.");
+        note.setText("ההקלטה מתחילה אוטומטית לאחר אישור Android ומסתיימת בסוף השיר. ברירת המחדל: העלאה לאתר; שמירה לאופליין ניתנת להגדרה.");
         note.setTextColor(0xffb2b2c7);
         note.setTextSize(12);
         root.addView(note);
@@ -232,7 +250,7 @@ public final class YouTubePlayerActivity extends Activity {
                     .putExtra(CaptureService.EXTRA_ID, trackId)
                     .putExtra(CaptureService.EXTRA_CODE, resultCode)
                     .putExtra(CaptureService.EXTRA_DATA, data);
-            capture.setText("מפעיל הקלטה...");
+            status.setText("התקבל אישור Android; מתחילה הקלטה אוטומטית…");
             status.setText("מפעיל צילום מסך ולכידת שמע...");
             startForegroundService(service);
         }
@@ -250,7 +268,7 @@ public final class YouTubePlayerActivity extends Activity {
 
     private void stopCapture() {
         capturing = false;
-        capture.setText("מסיים ושומר...");
+        capture.setVisibility(View.GONE);
         Intent service = new Intent(this, CaptureService.class).setAction(CaptureService.STOP);
         startService(service);
     }
@@ -276,6 +294,7 @@ public final class YouTubePlayerActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (capturing) stopCapture();
         if (receiverRegistered) { unregisterReceiver(captureEvents); receiverRegistered = false; }
         if (web != null) {
             web.stopLoading();

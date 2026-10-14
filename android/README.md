@@ -1,4 +1,4 @@
-# מוזיקה ללא גבולות — Android source (1.4.0)
+# מוזיקה ללא גבולות — Android source (1.5.0)
 
 Native Android application backed by the existing public music catalog at https://avi-music-player.lolaweiss73.chatgpt.site/ . The existing website is unchanged.
 
@@ -65,3 +65,22 @@ Official implementation reference: https://developer.android.com/media/media3/se
 - Silence-trim logic is amplitude-based; it does not identify speech, ad breaks, or music segmentation. No microphone fallback.
 - This is an initial implementation, not a production-tested feature. Physical-device testing must verify foreground service, screen capture, WebView playback, stop signaling, audio eligibility and WAV output.
 - The production update signing key remains necessary to deliver an installable update over an existing app without data loss.
+
+## 1.5.0 — automatic song capture and cloud-first storage (2026-10-14)
+- On YouTube IFrame ready, the app automatically requests required Android capture permissions (no Record button). Android still shows the system capture-consent dialog for each new MediaProjection session.
+- Upon successful capture start, playback seeks back to 0; the app stops capturing on IFrame 'ended' or when leaving. Screen-capture temporary video is deleted after creating the audio staging file.
+- A new CloudUpload worker uploads the completed WAV to a configured authenticated HTTPS service. It reports success only after a successful server response. Failed uploads remain private and pending for retry.
+- Offline recording retention is opt-in and disabled by default. Once a successful upload has been acknowledged, WAV staging is deleted unless the user checked the offline option.
+- Settings allows optional offline copies and secure server address/access-token setup; there is no hardcoded service secret. Without deployed upload backend, recordings remain pending.
+- The full playlist Refresh button requests a complete dynamic catalog, using a YouTube Data API based public-playlist sync backend when configured. The existing static website currently publishes only 27 playlists and does not discover new YouTube playlists by itself.
+- Cloud recordings can stream in the native Media3 player using server-scoped authorization. The standalone Node server source is in /server; it is NOT yet deployed or integrated into the existing website UI.
+- This branch needs Android on-device testing and production signing; a successful CI build does not validate actual playback capture or cloud persistence.
+
+## Side-by-side QA builds
+
+The Debug build adds the application ID suffix `.dev` and shows the launcher
+label "מוזיקה ללא גבולות · בדיקה". It installs **beside** the existing
+production-signed app, without uninstalling or overwriting its data.
+This suffix applies ONLY to Debug; the Release applicationId remains
+`il.nolimits.music`. Production upgrade still requires the original
+release signing key. The two app installations have independent local data.
