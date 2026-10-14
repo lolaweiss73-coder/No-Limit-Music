@@ -16,6 +16,8 @@ final class Catalog {
         final String id,title,src;
         Track(JSONObject o){ id=o.optString("youtubeId"); title=o.optString("title",id); src=o.optString("src",""); }
         boolean hosted(){return src.equals("media/"+id+".mp3") && id.matches("[A-Za-z0-9_-]{11}");}
+        boolean cloud(){return src.equals("cloud/"+id+".wav") && id.matches("[A-Za-z0-9_-]{11}");}
+        boolean serverAudio(){return hosted()||cloud();}
     }
     static final class Playlist {
         String title; final ArrayList<Track> tracks=new ArrayList<>();
@@ -37,12 +39,22 @@ final class Catalog {
         if(cache.exists())try{return parse(read(new FileInputStream(cache)));}catch(Exception ignored){}
         return parse(read(c.getAssets().open("playlists.json")));
     }
-    static ArrayList<Playlist> refresh(Context c) throws Exception {
-        HttpURLConnection connection=(HttpURLConnection)new URL(ORIGIN+"playlists.json").openConnection();
-        connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);
+    // Refresh always replaces the ENTIRE playlist catalog. Manual refresh
+    // also requests live public YouTube playlist discovery from the backend.
+    static ArrayList<Playlist> refresh(Context c, boolean forceSync) throws Exception {
+        boolean cloudConfigured=CloudUpload.configured(c);
+        String uri=cloudConfigured
+                ? CloudUpload.baseUrl(c)+"api/library.json"+(forceSync?"?sync=1":"")
+                : ORIGIN+"playlists.json";
+        HttpURLConnection connection=(HttpURLConnection)new URL(uri).openConnection();
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(forceSync?90000:20000);
+        connection.setUseCaches(!forceSync);
+        if(cloudConfigured)connection.setRequestProperty("Authorization","Bearer "+CloudUpload.authToken(c));
         try{
-            if(connection.getResponseCode()!=200)throw new IOException("HTTP "+connection.getResponseCode());
-            String body=read(connection.getInputStream());ArrayList<Playlist> parsed=parse(body);
+            if(connection.getResponseCode()!=200)throw new IOException("HTTP "+connection.getResponseCode()+" from playlist source");
+            String body=read(connection.getInputStream());
+            ArrayList<Playlist> parsed=parse(body);
             android.util.AtomicFile file=new android.util.AtomicFile(new File(c.getFilesDir(),"catalog.json"));
             FileOutputStream out=null;
             try{out=file.startWrite();out.write(body.getBytes(StandardCharsets.UTF_8));file.finishWrite(out);}
@@ -50,6 +62,7 @@ final class Catalog {
             return parsed;
         } finally {connection.disconnect();}
     }
+    static ArrayList<Playlist> refresh(Context c) throws Exception {return refresh(c,false);}
     static File local(Context c,Track t){return new File(c.getExternalFilesDir("music"),t.id+".mp3");}
     static long downloadId(Context c,Track t){return c.getSharedPreferences("downloads",0).getLong(t.id,-1);}
     static int downloadStatus(Context c,Track t){
@@ -60,7 +73,7 @@ final class Catalog {
         }catch(Exception e){return -1;}
     }
     static boolean saved(Context c,Track t){return local(c,t).isFile()&&downloadStatus(c,t)==DownloadManager.STATUS_SUCCESSFUL;}
-    static Uri uri(Context c,Track t){return saved(c,t)?Uri.fromFile(local(c,t)):Uri.parse(ORIGIN+t.src);}
+    static Uri uri(Context c,Track t){return saved(c,t)?Uri.fromFile(local(c,t)):t.cloud()?CloudUpload.recordedRemoteUri(c,t.id):Uri.parse(ORIGIN+t.src);}
     static void download(Context c,Track t){
         if(!t.hosted())throw new IllegalArgumentException("Not a server track");
         if(saved(c,t))return;
