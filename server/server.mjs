@@ -13,7 +13,7 @@ const source=process.env.SOURCE_PLAYLISTS_URL||'https://avi-music-player.lolawei
 const key=process.env.YOUTUBE_API_KEY||'';
 const channel=process.env.YOUTUBE_CHANNEL_ID||'';
 const token=process.env.UPLOAD_TOKEN||'';
-const max=150*1024*1024;
+const max=400*1024*1024; // recording includes video and sound
 const idValid=id=>/^[A-Za-z0-9_-]{11}$/.test(id);
 let inflight=null;
 
@@ -84,10 +84,10 @@ function merge(old,updated){
   return result;
 }
 async function overlay(library){
-  const wavs=new Set((await fsp.readdir(media)).filter(x=>x.endsWith('.wav')));
+  const videos=new Set((await fsp.readdir(media)).filter(x=>x.endsWith('.mp4')));
   return library.map(p=>({...p,tracks:p.tracks.map(t=>({
-    ...t,src:wavs.has(t.youtubeId+'.wav')&&!(t.src||'').startsWith('media/')
-        ?'cloud/'+t.youtubeId+'.wav':t.src
+    ...t,src:videos.has(t.youtubeId+'.mp4')&&!(t.src||'').startsWith('media/')
+        ?'cloud/'+t.youtubeId+'.mp4':t.src
   }))}));
 }
 async function getLibrary(sync){
@@ -116,11 +116,10 @@ async function getLibrary(sync){
 }
 async function put(req,res,id){
   if(!auth(req))return reply(res,401,{error:'Not authorized'});
-  if(!['audio/wav','audio/x-wav','audio/wave'].includes(
-    String(req.headers['content-type']||'').split(';')[0].toLowerCase()))
-    return reply(res,415,{error:'WAV required'});
+  if(String(req.headers['content-type']||'').split(';')[0].toLowerCase()!=='video/mp4')
+    return reply(res,415,{error:'MP4 required'});
   const length=Number(req.headers['content-length']);
-  if(!Number.isInteger(length)||length<44||length>max)
+  if(!Number.isInteger(length)||length<4096||length>max)
     return reply(res,413,{error:'Invalid file size'});
   const tmp=path.join(media,id+'.'+randomUUID()+'.upload');
   let bytes=0;
@@ -130,12 +129,13 @@ async function put(req,res,id){
   }});
   try{
     await pipeline(req,limiter,fs.createWriteStream(tmp,{flags:'wx',mode:0o600}));
-    const fd=await fsp.open(tmp,'r'),hdr=Buffer.alloc(44);
-    try{await fd.read(hdr,0,44,0);}finally{await fd.close();}
-    if(bytes!==length||hdr.toString('ascii',0,4)!=='RIFF'||
-      hdr.toString('ascii',8,12)!=='WAVE'||hdr.toString('ascii',36,40)!=='data')
-      return reply(res,422,{error:'Incomplete audio file'});
-    await fsp.rename(tmp,path.join(media,id+'.wav'));
+    const fd=await fsp.open(tmp,'r'),hdr=Buffer.alloc(12);
+    try{await fd.read(hdr,0,12,0);}finally{await fd.close();}
+    const boxLength=hdr.readUInt32BE(0);
+    if(bytes!==length||hdr.toString('ascii',4,8)!=='ftyp'||
+      boxLength<12||boxLength>bytes)
+      return reply(res,422,{error:'Invalid or incomplete MP4 header'});
+    await fsp.rename(tmp,path.join(media,id+'.mp4'));
     const current=await read(catalog);
     if(current){
       const revised=await overlay(clean(current));
@@ -149,7 +149,7 @@ async function put(req,res,id){
 }
 async function stream(req,res,id){
   if(!auth(req))return reply(res,401,{error:'Not authorized'});
-  const file=path.join(media,id+'.wav');let stat;
+  const file=path.join(media,id+'.mp4');let stat;
   try{stat=await fsp.stat(file);}catch{return reply(res,404,{error:'Not found'});}
   let begin=0,end=stat.size-1,status=200;
   const range=req.headers.range;
@@ -166,7 +166,7 @@ async function stream(req,res,id){
       return reply(res,416,{error:'Out of range'});
     status=206;
   }
-  const headers={'Content-Type':'audio/wav','Accept-Ranges':'bytes',
+  const headers={'Content-Type':'video/mp4','Accept-Ranges':'bytes',
     'Content-Length':end-begin+1,'Cache-Control':'private, max-age=600',
     'X-Content-Type-Options':'nosniff'};
   if(status===206)headers['Content-Range']='bytes '+begin+'-'+end+'/'+stat.size;
@@ -185,7 +185,7 @@ http.createServer(async(req,res)=>{
       if(sync&&!auth(req))return reply(res,401,{error:'Sync requires authentication'});
       return reply(res,200,await getLibrary(sync));
     }
-    const m=/^\/api\/recordings\/([A-Za-z0-9_-]{11})$/.exec(url.pathname);
+    const m=/^\/api\/recordings\/([A-Za-z0-9_-]{11})\.mp4$/.exec(url.pathname);
     if(m){
       if(req.method==='PUT')return put(req,res,m[1]);
       if(req.method==='GET'||req.method==='HEAD')return stream(req,res,m[1]);
