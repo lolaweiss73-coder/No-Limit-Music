@@ -48,13 +48,14 @@ public final class YouTubePlayerActivity extends Activity {
     private boolean receiverRegistered;
     private final BroadcastReceiver captureEvents = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
-            if (!trackId.equals(intent.getStringExtra(CaptureService.EXTRA_ID))) return;
             String action = intent.getAction();
-            String message = intent.getStringExtra(CaptureService.EXTRA_DETAILS);
             if (CloudUpload.ACTION_STATUS.equals(action)) {
-                status.setText(message);
+                if (trackId.equals(intent.getStringExtra(CloudUpload.EXTRA_ID)))
+                    status.setText(intent.getStringExtra(CloudUpload.EXTRA_MESSAGE));
                 return;
             }
+            if (!trackId.equals(intent.getStringExtra(CaptureService.EXTRA_ID))) return;
+            String message = intent.getStringExtra(CaptureService.EXTRA_DETAILS);
             if (CaptureService.READY.equals(action)) {
                 capturing = true;
                 capture.setVisibility(View.VISIBLE);
@@ -127,11 +128,11 @@ public final class YouTubePlayerActivity extends Activity {
                         status.setText("הנגן מוכן · מכינה הקלטה אוטומטית");
                         if (!captureRequested) {
                             captureRequested = true;
-                            if (RecordedAudio.saved(YouTubePlayerActivity.this, trackId)) {
+                            if (RecordedVideo.saved(YouTubePlayerActivity.this, trackId) && !CloudUpload.uploaded(YouTubePlayerActivity.this, trackId)) {
                                 status.setText("קיימת הקלטה מקומית שממתינה להעלאה.");
                                 CloudUpload.enqueue(YouTubePlayerActivity.this, trackId);
                             } else if (CloudUpload.uploaded(YouTubePlayerActivity.this, trackId)) {
-                                status.setText("השיר כבר שמור באתר.");
+                                status.setText("הווידאו כבר שמור באתר.");
                             } else if (!CloudUpload.configured(YouTubePlayerActivity.this)
                                     && !CloudUpload.keepOffline(YouTubePlayerActivity.this)) {
                                 status.setText("שרת ההקלטות עוד לא חובר. ניתן להאזין כרגיל; לא נוצרת הקלטה שתיתקע במכשיר.");
@@ -184,7 +185,7 @@ public final class YouTubePlayerActivity extends Activity {
         root.addView(close);
 
         TextView note = new TextView(this);
-        note.setText("ההקלטה מתחילה אוטומטית לאחר אישור Android ומסתיימת בסוף השיר. ברירת המחדל: העלאה לאתר; שמירה לאופליין ניתנת להגדרה.");
+        note.setText("ההקלטה מתחילה אוטומטית לאחר אישור Android ושומרת וידאו עם שמע באתר. בהגדרות אפשר לבחור: ללא אופליין, וידאו או שמע בלבד.");
         note.setTextColor(0xffb2b2c7);
         note.setTextSize(12);
         root.addView(note);
