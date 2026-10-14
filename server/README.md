@@ -8,7 +8,7 @@ deployed or connected to the existing `chatgpt.site` website.
 - `GET /healthz` — service readiness and whether YouTube sync is configured
 - `GET /api/library.json` — current entire catalog, including uploaded recordings
 - `GET /api/library.json?sync=1` — authenticated fresh sync of all public playlists from `YOUTUBE_CHANNEL_ID`. Requires `YOUTUBE_API_KEY` (server-side only). Preserves existing hand-curated lists and hosted tracks.
-- `PUT /api/recordings/{youtubeVideoId}` — authenticated complete WAV upload, maximum 150MB. Private storage under `DATA_DIR/media`.
+- `PUT /api/recordings/{youtubeVideoId}` — authenticated complete MP4 upload, maximum 400MB. Private storage under `DATA_DIR/media`.
 - `GET /api/recordings/{youtubeVideoId}` — authenticated streaming with byte range support for Media3.
 
 All recording endpoints and force-sync need `Authorization: Bearer $UPLOAD_TOKEN`.
@@ -37,3 +37,10 @@ The existing website's HTML frontend remains unchanged. The website
 must be integrated separately with this API before uploaded audio can be
 played directly from its browser interface. Recording success does not
 guarantee Android allows capture of every source.
+
+## MP4 video storage
+The server now accepts authenticated `video/mp4` upload to
+`PUT /api/recordings/{youtubeVideoId}.mp4`, stores it as MP4, and streams
+it through `GET /api/recordings/{youtubeVideoId}.mp4` with HTTP Range support.
+Android handles the optional local offline audio-only extraction. This
+backend has not yet been deployed to the actual public music website.
