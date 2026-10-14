@@ -26,8 +26,8 @@ jobs:
           java-version: '17'
           cache: gradle
           cache-dependency-path: android/**/*.gradle
-      - name: Prepare Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Check preinstalled Android SDK
+        run: sdkmanager --version
       - name: Install Android platform
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Compile and assemble test APK
