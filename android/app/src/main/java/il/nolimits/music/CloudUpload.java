@@ -19,7 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Uploads completed, user-consented audio recordings to the configured
+ * Uploads completed, user-consented screen videos with audio to the configured
  * authenticated cloud service. A private staging file survives failures so
  * no recording is falsely reported as stored online.
  */
@@ -54,11 +54,11 @@ final class CloudUpload {
     }
 
     static boolean uploaded(Context c, String id) {
-        return prefs(c).getBoolean("uploaded_" + id, false);
+        return prefs(c).getBoolean("video_uploaded_" + id, false);
     }
 
     static Uri recordedRemoteUri(Context c, String id) {
-        return Uri.parse(baseUrl(c) + "api/recordings/" + id);
+        return Uri.parse(baseUrl(c) + "api/recordings/" + id + ".mp4");
     }
 
     static void enqueue(Context c, String id) {
@@ -70,14 +70,14 @@ final class CloudUpload {
     static void retryPending(Context c) {
         Context app = c.getApplicationContext();
         WORKER.execute(() -> {
-            File dir = RecordedAudio.folder(app);
-            File[] recordings = dir.listFiles((d,name) -> name.endsWith(".wav"));
+            File dir = RecordedVideo.folder(app);
+            File[] recordings = dir.listFiles((d,name) -> name.endsWith(".mp4"));
             if (recordings == null) return;
             for (File f : recordings) {
                 String id = f.getName().substring(0, f.getName().length() - 4);
                 if (!id.matches("[A-Za-z0-9_-]{11}")) continue;
                 if (!uploaded(app,id)) upload(app,id);
-                else if (!keepOffline(app)) RecordedAudio.delete(app,id);
+                else if (!keepOffline(app)) RecordedVideo.delete(app,id);
             }
         });
     }
@@ -85,7 +85,7 @@ final class CloudUpload {
     static String authToken(Context c) { return prefs(c).getString(TOKEN, ""); }
 
     private static void upload(Context c, String id) {
-        if (!RecordedAudio.saved(c, id)) return;
+        if (!RecordedVideo.saved(c, id)) return;
         String token = authToken(c);
         if (token.isEmpty()) {
             report(c,id,false,"ממתינה להגדרת הרשאת העלאה לשרת. הקובץ הזמני נשמר עד אז.");
@@ -93,8 +93,8 @@ final class CloudUpload {
         }
         HttpURLConnection connection = null;
         try {
-            File file = RecordedAudio.song(c,id);
-            URL url = new URL(baseUrl(c) + "api/recordings/" + id);
+            File file = RecordedVideo.song(c,id);
+            URL url = new URL(baseUrl(c) + "api/recordings/" + id + ".mp4");
             if (!"https".equalsIgnoreCase(url.getProtocol()))
                 throw new IOException("Upload requires HTTPS");
             connection = (HttpURLConnection) url.openConnection();
@@ -103,7 +103,7 @@ final class CloudUpload {
             connection.setReadTimeout(90000);
             connection.setDoOutput(true);
             connection.setRequestProperty("Authorization", "Bearer " + token);
-            connection.setRequestProperty("Content-Type", "audio/wav");
+            connection.setRequestProperty("Content-Type", "video/mp4");
             connection.setRequestProperty("X-Track-Id", id);
             connection.setFixedLengthStreamingMode(file.length());
             try (InputStream input = new FileInputStream(file);
@@ -118,9 +118,9 @@ final class CloudUpload {
                 throw new IOException("שרת ההקלטות החזיר שגיאה " + status);
 
             // Mark uploaded only after the server acknowledged a complete write.
-            prefs(c).edit().putBoolean("uploaded_"+id,true).apply();
-            if (!keepOffline(c)) RecordedAudio.delete(c,id);
-            report(c,id,true,"השיר נשמר באתר" + (keepOffline(c)?" וגם במכשיר":""));
+            prefs(c).edit().putBoolean("video_uploaded_"+id,true).apply();
+            if (!keepOffline(c)) RecordedVideo.delete(c,id);
+            report(c,id,true,"הווידאו והשמע נשמרו באתר" + (keepOffline(c)?" וגם במכשיר":""));
         } catch (Exception e) {
             Log.w(LOG,"Cloud upload failed for "+id,e);
             report(c,id,false,"השמירה באתר טרם הושלמה; הקובץ נשמר זמנית להעלאה חוזרת.");
