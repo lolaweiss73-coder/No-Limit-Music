@@ -42,6 +42,20 @@ jobs:
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Check cloud service JavaScript syntax
         run: node --check server/server.mjs
+      - name: Cloud server HTTP smoke check
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3055 DATA_DIR="$RUNNER_TEMP/no-limit-cloud-ci" UPLOAD_TOKEN=ci-only-secret node server/server.mjs &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in {1..15}; do
+            if curl --fail --silent http://127.0.0.1:3055/healthz > "$RUNNER_TEMP/cloud-health.json"; then break; fi
+            sleep 1
+          done
+          grep -q '"ok":true' "$RUNNER_TEMP/cloud-health.json"
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3055/api/recordings/01234567890)
+          test "$code" = "401"
       - name: Compile and assemble test APK
         working-directory: android
         run: |
