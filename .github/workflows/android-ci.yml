@@ -56,6 +56,11 @@ jobs:
           grep -q '"ok":true' "$RUNNER_TEMP/cloud-health.json"
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3055/api/recordings/01234567890)
           test "$code" = "401"
+          python3 -c 'import wave,sys; w=wave.open(sys.argv[1],"wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b"\x00\x00\x00\x00"*44100); w.close()' "$RUNNER_TEMP/smoke.wav"
+          curl --fail --silent --show-error -X PUT -H "Authorization: Bearer ci-only-secret" -H "Content-Type: audio/wav" --data-binary @"$RUNNER_TEMP/smoke.wav" http://127.0.0.1:3055/api/recordings/01234567890 > "$RUNNER_TEMP/upload.json"
+          grep -q '"ok":true' "$RUNNER_TEMP/upload.json"
+          curl --fail --silent --show-error -H "Authorization: Bearer ci-only-secret" -H "Range: bytes=0-43" http://127.0.0.1:3055/api/recordings/01234567890 -o "$RUNNER_TEMP/returned-header.bin"
+          cmp "$RUNNER_TEMP/returned-header.bin" <(head -c 44 "$RUNNER_TEMP/smoke.wav")
       - name: Compile and assemble test APK
         working-directory: android
         run: |
