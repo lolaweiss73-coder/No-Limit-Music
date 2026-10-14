@@ -9,6 +9,7 @@
     <application android:label="@string/app_label" android:icon="@drawable/ic_music" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:allowAudioPlaybackCapture="true" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="false"/>
         <activity android:name=".YouTubePlayerActivity" android:exported="false"/>
+        <activity android:name=".VideoPlaybackActivity" android:exported="false"/>
         <activity android:name=".IntroActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
