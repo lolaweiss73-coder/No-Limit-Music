@@ -314,7 +314,9 @@ public class MainActivity extends Activity {
             .putExtra(YouTubePlayerActivity.EXTRA_ID,t.id)
             .putExtra(YouTubePlayerActivity.EXTRA_TITLE,t.title)
             .putExtra(YouTubePlayerActivity.EXTRA_QUEUE_JSON,tracks.toString())
-            .putExtra(YouTubePlayerActivity.EXTRA_QUEUE_INDEX,selectedIndex);
+            .putExtra(YouTubePlayerActivity.EXTRA_QUEUE_INDEX,selectedIndex)
+            .putExtra(YouTubePlayerActivity.EXTRA_SHUFFLE,
+                    player!=null&&player.getShuffleModeEnabled());
         startActivity(intent);
     }
     private void refresh(boolean announce){
