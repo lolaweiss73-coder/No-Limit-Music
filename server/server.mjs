@@ -9,6 +9,8 @@ import {Transform} from 'node:stream';
 const root=path.resolve(process.env.DATA_DIR||'./server-data');
 const media=path.join(root,'media');
 const catalog=path.join(root,'library.json');
+const syncState=path.join(root,'youtube-sync.json');
+const refreshIntervalMs=15*60*1000;
 const source=process.env.SOURCE_PLAYLISTS_URL||'https://avi-music-player.lolaweiss73.chatgpt.site/playlists.json';
 const key=process.env.YOUTUBE_API_KEY||'';
 const channel=process.env.YOUTUBE_CHANNEL_ID||'';
@@ -16,6 +18,7 @@ const token=process.env.UPLOAD_TOKEN||'';
 const max=400*1024*1024; // recording includes video and sound
 const idValid=id=>/^[A-Za-z0-9_-]{11}$/.test(id);
 let inflight=null;
+let lastRefreshFailure=null;
 
 function reply(res,status,obj){
   const body=Buffer.from(JSON.stringify(obj));
@@ -106,7 +109,26 @@ async function getLibrary(sync){
       }))}));
       for(const p of old||[])if(!oldIds.has(p.id))current.push(p);
     }
-    if(sync)current=merge(current,await discover());
+    const state=(await read(syncState))||{};
+    const expired=Date.now()-Number(state.updatedAt||0)>refreshIntervalMs;
+    if(sync&&!key)throw Error('YouTube sync not configured: missing YOUTUBE_API_KEY');
+    if(sync&&!channel)throw Error('YouTube sync not configured: missing YOUTUBE_CHANNEL_ID');
+    if((sync||expired)&&(key&&channel)){
+      try {
+        const discovered=await discover();
+        current=merge(current,discovered);
+        lastRefreshFailure=null;
+        await fsp.writeFile(syncState+'.new',JSON.stringify({
+          updatedAt:Date.now(),playlistCount:discovered.length
+        }));
+        await fsp.rename(syncState+'.new',syncState);
+      }catch(e){
+        lastRefreshFailure=String(e.message||e);
+        if(sync)throw e; // do not tell the user a manual refresh succeeded
+        // The last known library stays available during transient API failures.
+        console.warn('Automatic YouTube sync failed; serving cache:',lastRefreshFailure);
+      }
+    }
     current=await overlay(current);
     await fsp.writeFile(catalog+'.new',JSON.stringify(current));
     await fsp.rename(catalog+'.new',catalog);
@@ -178,11 +200,20 @@ await fsp.mkdir(media,{recursive:true});
 http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url||'/', 'https://localhost');
-    if(req.method==='GET'&&url.pathname==='/healthz')
-      return reply(res,200,{ok:true,youtubeSync:!!(key&&channel)});
+    if(req.method==='GET'&&url.pathname==='/healthz'){
+      const latest=await read(syncState);
+      return reply(res,200,{
+        ok:true,youtubeSyncConfigured:!!(key&&channel),
+        lastYouTubeSyncAt:latest?.updatedAt||null,
+        youtubeSyncError:lastRefreshFailure
+      });
+    }
     if(req.method==='GET'&&url.pathname==='/api/library.json'){
       const sync=url.searchParams.get('sync')==='1';
       if(sync&&!auth(req))return reply(res,401,{error:'Sync requires authentication'});
+      if(sync&&(!key||!channel))return reply(res,503,{
+        error:'YouTube API key and channel ID must be configured for live playlist discovery'
+      });
       return reply(res,200,await getLibrary(sync));
     }
     const m=/^\/api\/recordings\/([A-Za-z0-9_-]{11})\.mp4$/.exec(url.pathname);
