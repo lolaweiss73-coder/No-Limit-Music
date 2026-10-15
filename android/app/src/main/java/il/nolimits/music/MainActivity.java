@@ -15,6 +15,8 @@ import androidx.media3.session.*;
 import androidx.media3.session.MediaController;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.*;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
@@ -212,7 +214,7 @@ public class MainActivity extends Activity {
         ArrayList<Catalog.Track> base=selected>=0?playlists.get(selected).tracks:all();for(Catalog.Track t:base)if(matches(t))visible.add(t);
         subtitle.setText((selected>=0?playlists.get(selected).title:"כל השירים")+" · "+visible.size()+" שירים");
         if(!hostedOnly&&!offlineOnly)rows.addView(text("YouTube מתנגן בתוך האפליקציה; ייתכנו פרסומות ומגבלות השמעה ברקע.",14,MUTED));
-        rows.addView(button("נגן שיר ראשון",()->{for(Catalog.Track t:visible){if(t.serverAudio()||Catalog.saved(this,t)||CloudUpload.localAvailable(this,t.id)||CloudUpload.uploaded(this,t.id))start(t);else openYouTube(t);return;}toast("אין שירים זמינים ברשימה הזאת.");}));
+        rows.addView(button("הפעל פלייליסט ברצף",()->{if(!visible.isEmpty())openYouTube(visible.get(0));else toast("אין שירים בתצוגה.");}));
         if(visible.isEmpty())rows.addView(text("אין שירים בתצוגה הזאת. נסה לשנות את החיפוש או המסננים.",16,MUTED));
         for(Catalog.Track t:visible){
             boolean saved=Catalog.saved(this,t);
@@ -226,7 +228,7 @@ public class MainActivity extends Activity {
                     +(AudioTrim.get(this,t)!=null&&AudioTrim.get(this,t).changed()?" · קצוות שקטים הוסרו":"")
                     :t.hosted()?"בשרת · נשמר בניגון הראשון":"YouTube · נגן מובנה (ללא שמירה אוטומטית)",
                     13,saved?0xff83d7b2:MUTED));
-            info.setOnClickListener(v->{if(t.serverAudio()||saved||recorded||cloud)start(t);else openYouTube(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            info.setOnClickListener(v->{if(hostedOnly||offlineOnly)start(t);else openYouTube(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             if(t.hosted())row.addView(button(saved?"מחק":"שמור",()->{if(Catalog.saved(this,t)){
                 new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;}((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).remove(Catalog.downloadId(this,t));Catalog.local(this,t).delete();getSharedPreferences("downloads",0).edit().remove(t.id).apply();render();}).setNegativeButton("ביטול",null).show();
             }else try{Catalog.download(this,t);toast("ההורדה מופיעה בהתראות. השיר יישמר במכשיר.");}catch(Exception e){toast("לא ניתן להתחיל הורדה. נסה שוב.");}}));
@@ -238,7 +240,7 @@ public class MainActivity extends Activity {
                 if(RecordedVideo.delete(this,t.id)&&RecordedOfflineAudio.delete(this,t.id)){render();toast("עותק האופליין נמחק.");}
                 else toast("לא ניתן למחוק את ההקלטה.");
             }));
-            else if(cloud||t.cloud())row.addView(button("נגן",()->start(t)));
+            else if(cloud||t.cloud())row.addView(button("נגן",()->{if(hostedOnly||offlineOnly)start(t);else openYouTube(t);}));
             else row.addView(button("נגן",()->openYouTube(t)));
             rows.addView(row);View rule=new View(this);rule.setBackgroundColor(CARD);rows.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));
         }
@@ -297,9 +299,22 @@ public class MainActivity extends Activity {
     }
     private void openYouTube(Catalog.Track t){
         if(player!=null)player.pause();
+        JSONArray tracks=new JSONArray();
+        int selectedIndex=0;
+        for(Catalog.Track item:visible){
+            if(item.id.equals(t.id))selectedIndex=tracks.length();
+            try{
+                tracks.put(new JSONObject()
+                        .put("youtubeId",item.id)
+                        .put("title",item.title)
+                        .put("src",item.src));
+            }catch(Exception ignored){}
+        }
         Intent intent=new Intent(this,YouTubePlayerActivity.class)
             .putExtra(YouTubePlayerActivity.EXTRA_ID,t.id)
-            .putExtra(YouTubePlayerActivity.EXTRA_TITLE,t.title);
+            .putExtra(YouTubePlayerActivity.EXTRA_TITLE,t.title)
+            .putExtra(YouTubePlayerActivity.EXTRA_QUEUE_JSON,tracks.toString())
+            .putExtra(YouTubePlayerActivity.EXTRA_QUEUE_INDEX,selectedIndex);
         startActivity(intent);
     }
     private void refresh(boolean announce){
@@ -309,14 +324,21 @@ public class MainActivity extends Activity {
                 ArrayList<Catalog.Playlist> next=Catalog.refresh(this,announce);
                 runOnUiThread(()->{
                     if(destroyed)return;
-                    int previous=playlists.size();
+                    HashSet<String> oldIds=new HashSet<>();
+                    for(Catalog.Playlist p:playlists)oldIds.add(p.id);
+                    String oldSelection=selected>=0&&selected<playlists.size()
+                            ?playlists.get(selected).id:null;
                     playlists=next;
-                    if(selected>=playlists.size())selected=-1;
+                    selected=-1;
+                    if(oldSelection!=null)for(int j=0;j<playlists.size();j++){
+                        if(oldSelection.equals(playlists.get(j).id)){selected=j;break;}
+                    }
                     render();
                     if(announce) {
-                        int added=Math.max(0,playlists.size()-previous);
-                        toast(added>0?"נוספו "+added+" פלייליסטים חדשים. כעת יש "+playlists.size()
-                                :"האתר החזיר "+playlists.size()+" פלייליסטים. לא נמצאו חדשים.");
+                        int newCount=0;
+                        for(Catalog.Playlist p:playlists)if(!oldIds.contains(p.id))newCount++;
+                        toast(newCount>0?"נוספו "+newCount+" פלייליסטים. כעת יש "+playlists.size()
+                                :"הסנכרון הסתיים; "+playlists.size()+" פלייליסטים בספרייה.");
                     }
                 });
             }catch(Exception e){
