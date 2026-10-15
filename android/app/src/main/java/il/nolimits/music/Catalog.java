@@ -75,6 +75,10 @@ final class Catalog {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(forceSync?90000:20000);
         connection.setUseCaches(!forceSync);
+        if(forceSync){
+            connection.setRequestProperty("Cache-Control","no-cache, no-store, max-age=0");
+            connection.setRequestProperty("Pragma","no-cache");
+        }
         if(withAuth)connection.setRequestProperty("Authorization","Bearer "+CloudUpload.authToken(c));
         try {
             if(connection.getResponseCode()!=200)
