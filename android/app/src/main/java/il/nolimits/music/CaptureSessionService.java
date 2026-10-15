@@ -172,7 +172,7 @@ public final class CaptureSessionService extends Service {
     }
 
     private Notification notification(String message) {
-        Intent open=new Intent(this,YouTubePlayerActivity.class)
+        Intent open=new Intent(this,MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent resume=PendingIntent.getActivity(this,2217,open,
                 PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
