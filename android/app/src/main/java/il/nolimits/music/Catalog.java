@@ -20,12 +20,12 @@ final class Catalog {
         boolean serverAudio(){return hosted()||cloud();}
     }
     static final class Playlist {
-        String title; final ArrayList<Track> tracks=new ArrayList<>();
+        String id,title; final ArrayList<Track> tracks=new ArrayList<>();
     }
     static ArrayList<Playlist> parse(String json) throws Exception {
         JSONArray a=new JSONArray(json); ArrayList<Playlist> result=new ArrayList<>();
         for(int i=0;i<a.length();i++){
-            JSONObject o=a.getJSONObject(i); Playlist p=new Playlist();p.title=o.getString("title");
+            JSONObject o=a.getJSONObject(i); Playlist p=new Playlist();p.title=o.getString("title");p.id=o.optString("id",p.title);
             JSONArray ts=o.getJSONArray("tracks");
             for(int j=0;j<ts.length();j++){Track t=new Track(ts.getJSONObject(j));if(t.id.matches("[A-Za-z0-9_-]{11}"))p.tracks.add(t);}
             result.add(p);
