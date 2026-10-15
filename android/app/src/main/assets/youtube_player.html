@@ -19,10 +19,18 @@
   window.pausePlayback=function(){
     if(player && player.pauseVideo) player.pauseVideo();
   };
+  window.playVideoId=function(id){
+    if(!player || !player.loadVideoById){signal('blocked');return;}
+    if(player.getVideoData && player.getVideoData().video_id===id){
+      player.seekTo(0,true);
+      player.playVideo();
+    }else{
+      player.loadVideoById(id);
+    }
+  };
   window.restartPlayback=function(){
     if(!player || !player.seekTo){signal('blocked');return;}
-    player.seekTo(0, true);
-    player.playVideo();
+    player.seekTo(0,true);player.playVideo();
   };
   window.togglePlayback=function(){
     if(!player || !player.getPlayerState){ signal('blocked'); return; }
@@ -37,7 +45,7 @@
         origin:'https://avi-music-player.lolaweiss73.chatgpt.site'
       },
       events:{
-        onReady:function(e){signal('ready'); e.target.playVideo();},
+        onReady:function(e){signal('ready');},
         onStateChange:function(e){
           if(e.data===1)signal('playing');
           else if(e.data===0)signal('ended');

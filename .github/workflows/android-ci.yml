@@ -7,6 +7,7 @@ on:
       - fix/embedded-playback
       - feature/auto-record-cloud-first-v15
       - feature/video-mp4-cloud-first-v16
+      - feature/continuous-capture-playlist-sync-v17
   pull_request:
     branches:
       - main
