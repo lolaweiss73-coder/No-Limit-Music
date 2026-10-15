@@ -320,7 +320,10 @@ public class MainActivity extends Activity {
         startActivity(intent);
     }
     private void refresh(boolean announce){
-        if(announce)toast("בודקת גם פלייליסטים חדשים ביוטיוב…");
+        final boolean liveSyncConfigured=CloudUpload.configured(this);
+        if(announce)toast(liveSyncConfigured
+                ?"בודקת פלייליסטים חדשים מול שירות הסנכרון…"
+                :"השרת לא מחובר. בודקת את הרשימה שהאתר פרסם…");
         io.execute(()->{
             try{
                 ArrayList<Catalog.Playlist> next=Catalog.refresh(this,announce);
@@ -340,7 +343,9 @@ public class MainActivity extends Activity {
                         int newCount=0;
                         for(Catalog.Playlist p:playlists)if(!oldIds.contains(p.id))newCount++;
                         toast(newCount>0?"נוספו "+newCount+" פלייליסטים. כעת יש "+playlists.size()
-                                :"הסנכרון הסתיים; "+playlists.size()+" פלייליסטים בספרייה.");
+                                :liveSyncConfigured
+                                ?"הסנכרון הסתיים; "+playlists.size()+" פלייליסטים בספרייה."
+                                :"נטענו "+playlists.size()+" פלייליסטים מהאתר; גילוי חדש דורש חיבור שרת.");
                     }
                 });
             }catch(Exception e){
