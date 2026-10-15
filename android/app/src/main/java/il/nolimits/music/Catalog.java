@@ -57,12 +57,15 @@ final class Catalog {
             // Use the published read-only catalog which includes newly discovered playlists.
             return downloadCatalog(c,SYNC_LIBRARY,false,forceSync);
         } catch (Exception syncError) {
-            // A sync outage must not prevent users from refreshing from the old site.
+            // Preserve any previously synchronized catalogue during an outage.
+            // The original site is only a bootstrap fallback, not a replacement
+            // for newer playlists or track orders already saved locally.
+            if(new File(c.getFilesDir(),"catalog.json").isFile())throw syncError;
             try {
                 return downloadCatalog(c,ORIGIN+"playlists.json",false,false);
             } catch (Exception staticError) {
                 syncError.addSuppressed(staticError);
-                throw syncError; // cached catalog is untouched on failure
+                throw syncError;
             }
         }
     }
