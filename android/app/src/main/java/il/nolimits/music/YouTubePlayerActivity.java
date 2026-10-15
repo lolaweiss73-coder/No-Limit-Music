@@ -54,6 +54,7 @@ public final class YouTubePlayerActivity extends Activity {
     static final String EXTRA_TITLE = "video_title";
     static final String EXTRA_QUEUE_JSON = "session_queue_json";
     static final String EXTRA_QUEUE_INDEX = "session_queue_index";
+    static final String EXTRA_SHUFFLE = "session_shuffle";
 
     private static final int PERMISSION_AUDIO=4091;
     private static final int PERMISSION_PROJECTION=4092;
@@ -74,6 +75,8 @@ public final class YouTubePlayerActivity extends Activity {
     private boolean acceptEnd;
     private boolean receiverRegistered;
     private boolean finishing;
+    private boolean shuffleEnabled;
+    private boolean repeatAll;
 
     private final BroadcastReceiver sessionEvents=new BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent intent){
@@ -136,6 +139,8 @@ public final class YouTubePlayerActivity extends Activity {
         }
         index=Math.max(0,Math.min(queue.size()-1,
                 getIntent().getIntExtra(EXTRA_QUEUE_INDEX,0)));
+        shuffleEnabled=getIntent().getBooleanExtra(EXTRA_SHUFFLE,false);
+        if(shuffleEnabled)shuffleUpcoming();
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -238,6 +243,21 @@ public final class YouTubePlayerActivity extends Activity {
         Button following=button("הבא",v->next());
         controls.addView(following,new LinearLayout.LayoutParams(0,dp(52),1));
         root.addView(controls);
+        LinearLayout playbackOptions=new LinearLayout(this);
+        playbackOptions.setOrientation(LinearLayout.HORIZONTAL);
+        Button random=button(shuffleEnabled?"ערבוב: פעיל":"ערבוב: כבוי",v->{
+            shuffleEnabled=!shuffleEnabled;
+            if(shuffleEnabled)shuffleUpcoming();
+            ((Button)v).setText(shuffleEnabled?"ערבוב: פעיל":"ערבוב: כבוי");
+            status.setText("הניגון ממשיך; מזהי השירים נשמרים גם בערבוב");
+        });
+        playbackOptions.addView(random,new LinearLayout.LayoutParams(0,dp(46),1));
+        Button looping=button("חזרה: כבויה",v->{
+            repeatAll=!repeatAll;
+            ((Button)v).setText(repeatAll?"חזרה: פלייליסט":"חזרה: כבויה");
+        });
+        playbackOptions.addView(looping,new LinearLayout.LayoutParams(0,dp(46),1));
+        root.addView(playbackOptions);
 
         stopRecording=button("הפסק הקלטה · המשך מוזיקה",v->stopRecording());
         stopRecording.setVisibility(View.GONE);
@@ -288,7 +308,9 @@ public final class YouTubePlayerActivity extends Activity {
         if(requestSent||finishing)return;
         requestSent=true;
         progress.setText((index+1)+" / "+queue.size());
-        if(Build.VERSION.SDK_INT<29||
+        boolean needsCapture=false;
+        for(Catalog.Track item:queue)if(!alreadySaved(item)){needsCapture=true;break;}
+        if(Build.VERSION.SDK_INT<29||!needsCapture||
                 (!CloudUpload.configured(this)&&!CloudUpload.keepOffline(this))){
             status.setText("ניגון רציף · שרת הקלטות עדיין אינו מוגדר");
             playCurrent();
@@ -398,14 +420,27 @@ public final class YouTubePlayerActivity extends Activity {
         }
     }
 
+    private void shuffleUpcoming(){
+        if(queue.size()<2)return;
+        Catalog.Track chosen=queue.get(index);
+        ArrayList<Catalog.Track> remainder=new ArrayList<>(queue);
+        remainder.remove(index);
+        Collections.shuffle(remainder);
+        queue.clear();
+        queue.add(chosen);
+        queue.addAll(remainder);
+        index=0;
+    }
+
     private void advance(int delta){
         if(queue.isEmpty()||finishing)return;
-        if(delta>0&&index>=queue.size()-1){
+        if(delta>0&&index>=queue.size()-1&&!repeatAll){
             status.setText("הפלייליסט הסתיים");
             stopSession();
             return;
         }
-        int next=Math.max(0,Math.min(queue.size()-1,index+delta));
+        int next=delta>0&&index>=queue.size()-1&&repeatAll?0:
+                Math.max(0,Math.min(queue.size()-1,index+delta));
         if(next==index)return;
         acceptEnd=false;
         audioPlayer.stop();
