@@ -1,0 +1,33 @@
+name: Remove old unencrypted signing artifacts
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/purge-plaintext-signing-artifacts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  remove-unsafe-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete plaintext signing-key archives from GitHub Actions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --paginate --jq '.artifacts[] | select(.name=="No-Limit-Music-release-signing-backup") | .id' \
+            > "$RUNNER_TEMP/artifact-ids.txt"
+          total=0
+          while IFS= read -r id; do
+            test -z "$id" && continue
+            [[ "$id" =~ ^[0-9]+$ ]]
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+            total=$((total+1))
+          done < "$RUNNER_TEMP/artifact-ids.txt"
+          echo "Removed $total obsolete plaintext signing-key artifacts."
