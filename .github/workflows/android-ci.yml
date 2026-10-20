@@ -47,6 +47,21 @@ jobs:
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Check cloud service JavaScript syntax
         run: node --check server/server.mjs
+      - name: Test encrypted signing backup tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/signing-backup.mjs
+          TMP="$RUNNER_TEMP/signing-tool-test"
+          mkdir -p "$TMP"
+          printf 'PK\003\004test-key' > "$TMP/sample.zip"
+          node tools/signing-backup.mjs encrypt "$TMP/sample.zip" \
+            "$TMP/sample.encrypted.json" "$TMP/private-recovery.txt" \
+            il.test.signing SampleApp alias
+          node tools/signing-backup.mjs decrypt \
+            "$TMP/sample.encrypted.json" "$TMP/decrypted.zip" \
+            "$TMP/private-recovery.txt"
+          cmp "$TMP/sample.zip" "$TMP/decrypted.zip"
       - name: Cloud server HTTP smoke check
         shell: bash
         run: |
@@ -120,6 +135,7 @@ jobs:
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -Fi "Signer #1 certificate SHA-256 digest: a6b2d7f54643caae83dfac40ac9349c98767deabf2aede778e4500fe2674f643"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='il.nolimits.music' versionCode='8'"
           cp "$APK" "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.apk"
           sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.sha256"
