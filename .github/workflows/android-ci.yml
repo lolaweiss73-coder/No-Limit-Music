@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   android-build:
@@ -75,26 +76,28 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Create private release signing key
+      - name: Restore original production signing key
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           BACKUP_DIR="$RUNNER_TEMP/release-signing-backup"
           mkdir -p "$BACKUP_DIR"
+          # Preserve the identity of the first v1.7 production signing key.
+          gh run download 39426412480 \
+            --name No-Limit-Music-release-signing-backup \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$BACKUP_DIR"
           KEYSTORE="$BACKUP_DIR/no-limit-music-release.p12"
-          PASSWORD="$(openssl rand -hex 32)"
+          test -s "$KEYSTORE"
+          test -s "$BACKUP_DIR/signing-password.txt"
+          PASSWORD="$(cat "$BACKUP_DIR/signing-password.txt")"
           echo "::add-mask::$PASSWORD"
-          keytool -genkeypair -noprompt \
-            -keystore "$KEYSTORE" -storetype PKCS12 \
-            -storepass "$PASSWORD" -keypass "$PASSWORD" \
-            -alias nolimitmusic -keyalg RSA -keysize 3072 -validity 10000 \
-            -dname "CN=No Limit Music, O=Music Without Limits, C=IL"
-          printf '%s' "$PASSWORD" > "$BACKUP_DIR/signing-password.txt"
           printf '%s\n' \
             "NLM_SIGNING_KEYSTORE=$KEYSTORE" \
             "NLM_SIGNING_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
-          chmod 600 "$BACKUP_DIR/"*
-
+          
       - name: Assemble signed production APK
         working-directory: android
         run: |
