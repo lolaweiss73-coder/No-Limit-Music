@@ -20,6 +20,8 @@ jobs:
   android-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      SIGNING_BACKUP_PASSPHRASE: ${{ secrets.NLM_SIGNING_BACKUP_PASSPHRASE }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -76,19 +78,20 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Restore original production signing key
+      - name: Restore release signing key from encrypted Git backup
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           BACKUP_DIR="$RUNNER_TEMP/release-signing-backup"
           mkdir -p "$BACKUP_DIR"
-          # Preserve the identity of the first v1.7 production signing key.
-          gh run download 39426412480 \
-            --name No-Limit-Music-release-signing-backup \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir "$BACKUP_DIR"
+          # The encrypted backup is committed on main. The secret is not.
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/signing-backups/il.nolimits.music.v1.p12.encrypted.json" \
+            -o "$BACKUP_DIR/backup.encrypted.json"
+          node tools/signing-backup.mjs decrypt \
+            "$BACKUP_DIR/backup.encrypted.json" "$BACKUP_DIR/key-archive.zip"
+          unzip -qo "$BACKUP_DIR/key-archive.zip" -d "$BACKUP_DIR"
           KEYSTORE="$BACKUP_DIR/no-limit-music-release.p12"
           test -s "$KEYSTORE"
           test -s "$BACKUP_DIR/signing-password.txt"
@@ -97,14 +100,20 @@ jobs:
           printf '%s\n' \
             "NLM_SIGNING_KEYSTORE=$KEYSTORE" \
             "NLM_SIGNING_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
-          
+          rm -f "$BACKUP_DIR/key-archive.zip"
+      - name: Explain missing signing secret
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
+        run: |
+          echo "::warning::Debug build succeeded, but signed release requires repository secret NLM_SIGNING_BACKUP_PASSPHRASE. Never generate a replacement signing key automatically."
       - name: Assemble signed production APK
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace :app:assembleRelease
           
       - name: Verify production package and APK signature
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -116,6 +125,7 @@ jobs:
           sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.sha256"
 
       - name: Save production APK
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: No-Limit-Music-1.7.0-signed-release
@@ -123,11 +133,3 @@ jobs:
             No-Limit-Music-1.7.0-release.apk
             No-Limit-Music-1.7.0-release.sha256
           if-no-files-found: error
-
-      - name: Save signing-key backup for future upgrades
-        uses: actions/upload-artifact@v4
-        with:
-          name: No-Limit-Music-release-signing-backup
-          path: ${{ runner.temp }}/release-signing-backup/
-          if-no-files-found: error
-          retention-days: 30
