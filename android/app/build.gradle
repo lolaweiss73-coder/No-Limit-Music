@@ -3,12 +3,26 @@ android {
     namespace 'il.nolimits.music'
     compileSdk 35
     defaultConfig { applicationId 'il.nolimits.music'; minSdk 26; targetSdk 35; versionCode 8; versionName '1.7.0' }
+    signingConfigs {
+        release {
+            // Never place signing credentials in this public repository.
+            def keyStorePath = System.getenv('NLM_SIGNING_KEYSTORE')
+            def keyStorePassword = System.getenv('NLM_SIGNING_PASSWORD')
+            if (keyStorePath && keyStorePassword) {
+                storeFile file(keyStorePath)
+                storePassword keyStorePassword
+                keyAlias 'nolimitmusic'
+                keyPassword keyStorePassword
+            }
+        }
+    }
     buildTypes {
         debug {
             applicationIdSuffix '.dev'
             resValue 'string', 'app_label', 'מוזיקה ללא גבולות · בדיקה'
         }
         release {
+            signingConfig signingConfigs.release
             resValue 'string', 'app_label', 'מוזיקה ללא גבולות'
         }
     }
