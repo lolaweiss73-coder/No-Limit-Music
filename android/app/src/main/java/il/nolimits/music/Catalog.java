@@ -44,32 +44,71 @@ final class Catalog {
         if(cache.exists())try{return parse(read(new FileInputStream(cache)));}catch(Exception ignored){}
         return parse(read(c.getAssets().open("playlists.json")));
     }
-    // Refresh always replaces the ENTIRE playlist catalog. Manual refresh
-    // also requests live public YouTube playlist discovery from the backend.
+    // Always fetch the complete YouTube catalog first, even when a private
+    // recording service is configured. Cloud recordings enrich track sources,
+    // but must never replace YouTube playlist membership, ordering or titles.
     static ArrayList<Playlist> refresh(Context c, boolean forceSync) throws Exception {
-        boolean cloudConfigured=CloudUpload.configured(c);
-        if (cloudConfigured) {
-            // The owner's private cloud backend has its own authenticated catalog.
-            return downloadCatalog(c,CloudUpload.baseUrl(c)+"api/library.json"
-                    +(forceSync?"?sync=1":""),true,forceSync);
-        }
+        final File cached=new File(c.getFilesDir(),"catalog.json");
+        String body;
         try {
-            // Use the published read-only catalog which includes newly discovered playlists.
-            return downloadCatalog(c,SYNC_LIBRARY,false,forceSync);
-        } catch (Exception syncError) {
-            // Preserve any previously synchronized catalogue during an outage.
-            // The original site is only a bootstrap fallback, not a replacement
-            // for newer playlists or track orders already saved locally.
-            if(new File(c.getFilesDir(),"catalog.json").isFile())throw syncError;
+            body=fetchCatalogJson(c,SYNC_LIBRARY,false,forceSync);
+        } catch(Exception syncError) {
+            // An outage must never replace already-synced playlists with an
+            // older static snapshot (which may resurrect deleted songs).
+            if(cached.isFile())throw syncError;
             try {
-                return downloadCatalog(c,ORIGIN+"playlists.json",false,false);
-            } catch (Exception staticError) {
+                body=fetchCatalogJson(c,ORIGIN+"playlists.json",false,false);
+            } catch(Exception staticError) {
                 syncError.addSuppressed(staticError);
                 throw syncError;
             }
         }
+
+        JSONArray playlistsJson=body.trim().startsWith("{")
+                ? new JSONObject(body).getJSONArray("playlists") : new JSONArray(body);
+
+        // Keep previously uploaded media playable when a cloud server is set.
+        // A server outage cannot block the public library synchronization.
+        if(CloudUpload.configured(c)) {
+            try {
+                ArrayList<Playlist> cloud=parse(fetchCatalogJson(
+                        c,CloudUpload.baseUrl(c)+"api/library.json",true,false));
+                HashMap<String,String> cloudFiles=new HashMap<>();
+                for(Playlist p:cloud)for(Track track:p.tracks)
+                    if(track.cloud())cloudFiles.put(track.id,track.src);
+
+                for(int i=0;i<playlistsJson.length();i++){
+                    JSONArray tracks=playlistsJson.getJSONObject(i).getJSONArray("tracks");
+                    for(int j=0;j<tracks.length();j++){
+                        JSONObject track=tracks.getJSONObject(j);
+                        String id=track.optString("youtubeId","");
+                        String src=track.optString("src","");
+                        // Prefer server-hosted audio already in the catalog.
+                        if(!src.equals("media/"+id+".mp3")&&cloudFiles.containsKey(id))
+                            track.put("src",cloudFiles.get(id));
+                    }
+                }
+            }catch(Exception cloudError){
+                android.util.Log.w("NoLimitCatalog",
+                        "Cloud media metadata unavailable; keeping live playlist catalog",
+                        cloudError);
+            }
+        }
+        String complete=playlistsJson.toString();
+        ArrayList<Playlist> parsed=parse(complete);
+        android.util.AtomicFile file=new android.util.AtomicFile(cached);
+        FileOutputStream out=null;
+        try {
+            out=file.startWrite();
+            out.write(complete.getBytes(StandardCharsets.UTF_8));
+            file.finishWrite(out);
+        } catch(IOException e){
+            if(out!=null)file.failWrite(out);
+            throw e;
+        }
+        return parsed;
     }
-    private static ArrayList<Playlist> downloadCatalog(
+    private static String fetchCatalogJson(
             Context c,String uri,boolean withAuth,boolean forceSync) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(uri).openConnection();
         connection.setConnectTimeout(15000);
@@ -83,17 +122,7 @@ final class Catalog {
         try {
             if(connection.getResponseCode()!=200)
                 throw new IOException("HTTP "+connection.getResponseCode()+" from playlist source");
-            String body=read(connection.getInputStream());
-            ArrayList<Playlist> parsed=parse(body);
-            android.util.AtomicFile file=new android.util.AtomicFile(new File(c.getFilesDir(),"catalog.json"));
-            FileOutputStream out=null;
-            try {
-                out=file.startWrite();out.write(body.getBytes(StandardCharsets.UTF_8));file.finishWrite(out);
-            } catch(IOException e) {
-                if(out!=null)file.failWrite(out);
-                throw e;
-            }
-            return parsed;
+            return read(connection.getInputStream());
         } finally {connection.disconnect();}
     }
     static ArrayList<Playlist> refresh(Context c) throws Exception {return refresh(c,false);}
