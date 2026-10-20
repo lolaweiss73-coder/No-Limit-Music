@@ -74,3 +74,57 @@ jobs:
           name: app-compile-test-only
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Create private release signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP_DIR="$RUNNER_TEMP/release-signing-backup"
+          mkdir -p "$BACKUP_DIR"
+          KEYSTORE="$BACKUP_DIR/no-limit-music-release.p12"
+          PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$PASSWORD"
+          keytool -genkeypair -noprompt \
+            -keystore "$KEYSTORE" -storetype PKCS12 \
+            -storepass "$PASSWORD" -keypass "$PASSWORD" \
+            -alias nolimitmusic -keyalg RSA -keysize 3072 -validity 10000 \
+            -dname "CN=No Limit Music, O=Music Without Limits, C=IL"
+          printf '%s' "$PASSWORD" > "$BACKUP_DIR/signing-password.txt"
+          printf '%s\n' \
+            "NLM_SIGNING_KEYSTORE=$KEYSTORE" \
+            "NLM_SIGNING_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+          chmod 600 "$BACKUP_DIR/"*
+
+      - name: Assemble signed production APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          
+      - name: Verify production package and APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='il.nolimits.music' versionCode='8'"
+          cp "$APK" "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.apk"
+          sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.0-release.sha256"
+
+      - name: Save production APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: No-Limit-Music-1.7.0-signed-release
+          path: |
+            No-Limit-Music-1.7.0-release.apk
+            No-Limit-Music-1.7.0-release.sha256
+          if-no-files-found: error
+
+      - name: Save signing-key backup for future upgrades
+        uses: actions/upload-artifact@v4
+        with:
+          name: No-Limit-Music-release-signing-backup
+          path: ${{ runner.temp }}/release-signing-backup/
+          if-no-files-found: error
+          retention-days: 30
