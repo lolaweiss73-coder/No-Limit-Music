@@ -22,7 +22,9 @@ android {
             resValue 'string', 'app_label', 'מוזיקה ללא גבולות · בדיקה'
         }
         release {
-            signingConfig signingConfigs.release
+            if (System.getenv('NLM_SIGNING_KEYSTORE') && System.getenv('NLM_SIGNING_PASSWORD')) {
+                signingConfig signingConfigs.release
+            }
             resValue 'string', 'app_label', 'מוזיקה ללא גבולות'
         }
     }
