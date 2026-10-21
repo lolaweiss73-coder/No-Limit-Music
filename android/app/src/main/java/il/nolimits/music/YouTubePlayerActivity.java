@@ -8,11 +8,18 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.Typeface;
 import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -58,11 +65,29 @@ public final class YouTubePlayerActivity extends Activity {
 
     private static final int PERMISSION_AUDIO=4091;
     private static final int PERMISSION_PROJECTION=4092;
+    private static final int REQUEST_LYRICS=5099;
+    private static final String LYRICS_PREFS="lyrics_preferences";
     private final ArrayList<Catalog.Track> queue=new ArrayList<>();
     private WebView web;
     private ExoPlayer audioPlayer;
     private PlayerView mediaView;
-    private TextView status,title,progress;
+    private TextView status,title,progress,lyricsView;
+    private Button lyricsToggle;
+    private boolean showLyrics;
+    private ArrayList<LyricsStore.Cue> lyricCues=new ArrayList<>();
+    private final Handler lyricsHandler=new Handler(Looper.getMainLooper());
+    private final Runnable lyricsClock=new Runnable(){
+        @Override public void run(){
+            if(lyricsView!=null&&showLyrics&&!lyricCues.isEmpty()){
+                if(currentIsWeb&&web!=null&&webpageReady){
+                    web.evaluateJavascript("window.getPlaybackTime ? window.getPlaybackTime() : 0",value->{
+                        try{drawLyrics((long)(Double.parseDouble(value)*1000));}catch(Exception ignored){}
+                    });
+                }else if(audioPlayer!=null) drawLyrics(Math.max(0,audioPlayer.getCurrentPosition()));
+            }
+            lyricsHandler.postDelayed(this,550);
+        }
+    };
     private Button stopRecording;
     private int index;
     private String trackId;
@@ -141,6 +166,7 @@ public final class YouTubePlayerActivity extends Activity {
                 getIntent().getIntExtra(EXTRA_QUEUE_INDEX,0)));
         shuffleEnabled=getIntent().getBooleanExtra(EXTRA_SHUFFLE,false);
         if(shuffleEnabled)shuffleUpcoming();
+        showLyrics=getSharedPreferences(LYRICS_PREFS,MODE_PRIVATE).getBoolean("enabled",true);
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -233,41 +259,71 @@ public final class YouTubePlayerActivity extends Activity {
         mediaView.setPlayer(audioPlayer);
         mediaView.setUseController(true);
         root.addView(mediaView,new LinearLayout.LayoutParams(-1,0,1));
+        lyricsView=new TextView(this);
+        lyricsView.setTextColor(Color.WHITE);
+        lyricsView.setTextSize(17);
+        lyricsView.setTypeface(null,Typeface.BOLD);
+        lyricsView.setGravity(Gravity.CENTER);
+        lyricsView.setPadding(dp(12),dp(8),dp(12),dp(8));
+        lyricsView.setBackgroundColor(0xff2c2235);
+        lyricsView.setMinHeight(dp(50));
+        lyricsView.setVisibility(View.GONE);
+        root.addView(lyricsView,new LinearLayout.LayoutParams(-1,-2));
 
         LinearLayout controls=new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
-        Button previous=button("הקודם",v->previous());
-        controls.addView(previous,new LinearLayout.LayoutParams(0,dp(52),1));
-        Button pause=button("נגן / השהה",v->toggle());
-        controls.addView(pause,new LinearLayout.LayoutParams(0,dp(52),2));
-        Button following=button("הבא",v->next());
-        controls.addView(following,new LinearLayout.LayoutParams(0,dp(52),1));
+        controls.setGravity(Gravity.CENTER);
+        Button previous=button("⏮",v->previous());
+        previous.setContentDescription("השיר הקודם");
+        previous.setTextSize(25);
+        controls.addView(previous,new LinearLayout.LayoutParams(0,dp(56),1));
+        Button pause=button("⏯",v->toggle());
+        pause.setContentDescription("נגן או השהה");
+        pause.setTextSize(30);
+        pause.setBackground(pill(0xffb44778));
+        controls.addView(pause,new LinearLayout.LayoutParams(0,dp(60),2));
+        Button following=button("⏭",v->next());
+        following.setContentDescription("השיר הבא");
+        following.setTextSize(25);
+        controls.addView(following,new LinearLayout.LayoutParams(0,dp(56),1));
         root.addView(controls);
         LinearLayout playbackOptions=new LinearLayout(this);
         playbackOptions.setOrientation(LinearLayout.HORIZONTAL);
-        Button random=button(shuffleEnabled?"ערבוב: פעיל":"ערבוב: כבוי",v->{
+        Button random=button(shuffleEnabled?"⤨ ערבוב פעיל":"⤨ ערבוב כבוי",v->{
             shuffleEnabled=!shuffleEnabled;
             if(shuffleEnabled)shuffleUpcoming();
-            ((Button)v).setText(shuffleEnabled?"ערבוב: פעיל":"ערבוב: כבוי");
+            ((Button)v).setText(shuffleEnabled?"⤨ ערבוב פעיל":"⤨ ערבוב כבוי");
             status.setText("הניגון ממשיך; מזהי השירים נשמרים גם בערבוב");
         });
         playbackOptions.addView(random,new LinearLayout.LayoutParams(0,dp(46),1));
-        Button looping=button("חזרה: כבויה",v->{
+        Button looping=button("↻ חזרה כבויה",v->{
             repeatAll=!repeatAll;
-            ((Button)v).setText(repeatAll?"חזרה: פלייליסט":"חזרה: כבויה");
+            ((Button)v).setText(repeatAll?"↻ חזרה פעילה":"↻ חזרה כבויה");
         });
         playbackOptions.addView(looping,new LinearLayout.LayoutParams(0,dp(46),1));
         root.addView(playbackOptions);
+        LinearLayout captionActions=new LinearLayout(this);
+        captionActions.setOrientation(LinearLayout.HORIZONTAL);
+        lyricsToggle=button("CC כתוביות",v->{
+            showLyrics=!showLyrics;
+            getSharedPreferences(LYRICS_PREFS,MODE_PRIVATE).edit().putBoolean("enabled",showLyrics).apply();
+            loadLyrics();
+        });
+        captionActions.addView(lyricsToggle,new LinearLayout.LayoutParams(0,dp(48),1));
+        Button importLyrics=button("＋ הוסף כתוביות",v->pickLyrics());
+        captionActions.addView(importLyrics,new LinearLayout.LayoutParams(0,dp(48),1));
+        root.addView(captionActions);
 
-        stopRecording=button("הפסק הקלטה · המשך מוזיקה",v->stopRecording());
+        stopRecording=button("⏹ הפסק הקלטה · המשך מוזיקה",v->stopRecording());
+        stopRecording.setBackground(pill(0xff812d43));
         stopRecording.setVisibility(View.GONE);
         root.addView(stopRecording);
 
-        Button close=button("חזרה לספרייה",v->{stopSession();finish();});
+        Button close=button("↩ חזרה לספרייה",v->{stopSession();finish();});
         root.addView(close);
         TextView caption=new TextView(this);
-        caption.setText("האישור להקלטה ניתן פעם אחת בתחילת סשן ההאזנה. "
-                +"שירים עוברים אוטומטית; ניתן לעצור הקלטה בלי לעצור מוזיקה.");
+        caption.setText("כתוביות אישיות: SRT / VTT / LRC / TXT. ההעדפה לגבי כתוביות YouTube "
+                +"תלויה גם בהגדרות הנגן שלהם. הקלטה דורשת את אישור Android.");
         caption.setTextColor(0xffa9a9c3);
         caption.setTextSize(12);
         root.addView(caption);
@@ -298,10 +354,48 @@ public final class YouTubePlayerActivity extends Activity {
         }
     }
 
+    private RippleDrawable pill(int color){
+        GradientDrawable shape=new GradientDrawable();
+        shape.setColor(color);
+        shape.setCornerRadius(dp(22));
+        shape.setStroke(dp(1),0xff584259);
+        return new RippleDrawable(ColorStateList.valueOf(0x55ffffff),shape,null);
+    }
+
     private Button button(String label,View.OnClickListener action){
         Button b=new Button(this);
-        b.setAllCaps(false);b.setText(label);b.setOnClickListener(action);
+        b.setAllCaps(false);
+        b.setText(label);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(13);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(6),0,dp(6),0);
+        b.setMinHeight(dp(44));
+        b.setBackground(pill(0xff333040));
+        b.setOnClickListener(action);
         return b;
+    }
+
+    private void pickLyrics(){
+        Intent select=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        select.addCategory(Intent.CATEGORY_OPENABLE);
+        select.setType("*/*");
+        select.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(select,REQUEST_LYRICS);
+    }
+
+    private void loadLyrics(){
+        if(trackId==null||lyricsView==null)return;
+        lyricCues=LyricsStore.load(this,trackId);
+        lyricsView.setVisibility(showLyrics&&!lyricCues.isEmpty()?View.VISIBLE:View.GONE);
+        if(lyricsToggle!=null)lyricsToggle.setText(showLyrics?"CC כתוביות פעילות":"CC כתוביות כבויות");
+        if(showLyrics&&!lyricCues.isEmpty())drawLyrics(0);
+    }
+
+    private void drawLyrics(long milliseconds){
+        if(lyricsView==null||!showLyrics||lyricCues.isEmpty())return;
+        String line=LyricsStore.at(lyricCues,milliseconds);
+        if(!line.contentEquals(lyricsView.getText()))lyricsView.setText(line);
     }
 
     private void beginListening(){
@@ -343,6 +437,18 @@ public final class YouTubePlayerActivity extends Activity {
 
     @Override protected void onActivityResult(int code,int resultCode,Intent data){
         super.onActivityResult(code,resultCode,data);
+        if(code==REQUEST_LYRICS){
+            if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&trackId!=null){
+                try(InputStream input=getContentResolver().openInputStream(data.getData())){
+                    LyricsStore.importForTrack(this,trackId,input);
+                    showLyrics=true;
+                    getSharedPreferences(LYRICS_PREFS,MODE_PRIVATE).edit().putBoolean("enabled",true).apply();
+                    loadLyrics();
+                    status.setText("הכתוביות נטענו ונשמרו לשיר הזה");
+                }catch(Exception e){status.setText("לא ניתן לקרוא כתוביות: בחר קובץ SRT, VTT, LRC או TXT תקין.");}
+            }
+            return;
+        }
         if(code!=PERMISSION_PROJECTION)return;
         if(resultCode!=RESULT_OK||data==null){
             status.setText("ההקלטה לא אושרה; מוזיקה תתנגן כרגיל");
@@ -390,6 +496,7 @@ public final class YouTubePlayerActivity extends Activity {
         trackId=track.id;
         title.setText(track.title);
         progress.setText((index+1)+" / "+queue.size());
+        loadLyrics();
         boolean localAudio=RecordedOfflineAudio.saved(this,track.id)
                 &&CloudUpload.MODE_AUDIO.equals(CloudUpload.offlineMode(this));
         boolean localVideo=RecordedVideo.saved(this,track.id);
@@ -478,6 +585,7 @@ public final class YouTubePlayerActivity extends Activity {
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
 
     @Override protected void onPause(){
+        lyricsHandler.removeCallbacks(lyricsClock);
         if(web!=null)web.onPause();
         super.onPause();
     }
@@ -485,10 +593,13 @@ public final class YouTubePlayerActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         if(web!=null)web.onResume();
+        lyricsHandler.removeCallbacks(lyricsClock);
+        lyricsHandler.post(lyricsClock);
     }
 
     @Override protected void onDestroy(){
         finishing=true;
+        lyricsHandler.removeCallbacks(lyricsClock);
         stopSession();
         if(receiverRegistered){unregisterReceiver(sessionEvents);receiverRegistered=false;}
         if(audioPlayer!=null){audioPlayer.release();audioPlayer=null;}

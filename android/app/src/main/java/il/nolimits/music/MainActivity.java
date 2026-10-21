@@ -91,7 +91,14 @@ public class MainActivity extends Activity {
     private LinearLayout line(){LinearLayout l=new LinearLayout(this);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     private TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setPadding(dp(4),dp(5),dp(4),dp(5));return t;}
     private GradientDrawable rounded(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(16));return d;}
-    private Button button(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setTextSize(14);b.setTextColor(Color.WHITE);b.setAllCaps(false);b.setMinHeight(dp(48));b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(CARD));b.setOnClickListener(v->r.run());return b;}
+    private Button button(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setTextSize(14);b.setTextColor(Color.WHITE);b.setAllCaps(false);b.setMinHeight(dp(48));b.setBackground(rounded(CARD));b.setOnClickListener(v->r.run());return b;}
+    private Button transport(String icon,String label,Runnable action,boolean primary){
+        Button b=button(icon,action);
+        b.setContentDescription(label);
+        b.setTextSize(primary?30:25);
+        b.setBackground(rounded(primary?0xffb44778:0xff30303f));
+        return b;
+    }
     private void buildUi(){
         LinearLayout root=column();root.setBackgroundColor(BG);root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);root.setPadding(dp(16),dp(10),dp(16),0);
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(dp(16)+insets.getSystemWindowInsetLeft(),dp(8)+insets.getSystemWindowInsetTop(),dp(16)+insets.getSystemWindowInsetRight(),dp(8)+insets.getSystemWindowInsetBottom());return insets;});
@@ -110,10 +117,11 @@ public class MainActivity extends Activity {
         seek=new SeekBar(this);seek.setMax(1000);seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int v,boolean user){}public void onStartTrackingTouch(SeekBar s){dragging=true;}public void onStopTrackingTouch(SeekBar s){if(player!=null&&player.getDuration()>0)player.seekTo(player.getDuration()*s.getProgress()/1000);dragging=false;}});dock.addView(seek);
         time=text("0:00 / 0:00",12,MUTED);time.setGravity(Gravity.CENTER);dock.addView(time);
         LinearLayout controls=line();controls.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        controls.addView(button("הקודם",()->{if(player!=null)player.seekToPreviousMediaItem();}),new LinearLayout.LayoutParams(0,dp(50),1));
-        play=button("נגן",()->{if(player==null)return;if(player.isPlaying())player.pause();else {if(player.getPlaybackState()==Player.STATE_IDLE)player.prepare();player.play();}});play.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xffab3d64));controls.addView(play,new LinearLayout.LayoutParams(0,dp(50),1));
-        controls.addView(button("הבא",()->{if(player!=null)player.seekToNextMediaItem();}),new LinearLayout.LayoutParams(0,dp(50),1));dock.addView(controls);
-        LinearLayout modes=line();shuffle=button("ערבוב כבוי",()->{if(player!=null)player.setShuffleModeEnabled(!player.getShuffleModeEnabled());});repeat=button("חזרה כבויה",()->{if(player!=null)player.setRepeatMode((player.getRepeatMode()+1)%3);});modes.addView(shuffle,new LinearLayout.LayoutParams(0,dp(48),1));modes.addView(repeat,new LinearLayout.LayoutParams(0,dp(48),1));dock.addView(modes);root.addView(dock);setContentView(root);
+        controls.addView(transport("⏮","שיר קודם",()->{if(player!=null)player.seekToPreviousMediaItem();},false),new LinearLayout.LayoutParams(0,dp(54),1));
+        play=transport("▶","נגן / השהה",()->{if(player==null)return;if(player.isPlaying())player.pause();else {if(player.getPlaybackState()==Player.STATE_IDLE)player.prepare();player.play();}},true);
+        controls.addView(play,new LinearLayout.LayoutParams(0,dp(60),1));
+        controls.addView(transport("⏭","שיר הבא",()->{if(player!=null)player.seekToNextMediaItem();},false),new LinearLayout.LayoutParams(0,dp(54),1));dock.addView(controls);
+        LinearLayout modes=line();shuffle=button("⤨ ערבוב כבוי",()->{if(player!=null)player.setShuffleModeEnabled(!player.getShuffleModeEnabled());});repeat=button("↻ חזרה כבויה",()->{if(player!=null)player.setRepeatMode((player.getRepeatMode()+1)%3);});modes.addView(shuffle,new LinearLayout.LayoutParams(0,dp(48),1));modes.addView(repeat,new LinearLayout.LayoutParams(0,dp(48),1));dock.addView(modes);root.addView(dock);setContentView(root);
     }
     private void showSettings(){
         boolean disabled=getSharedPreferences(IntroActivity.PREFS,0).getBoolean(IntroActivity.DISABLED,false);
@@ -374,7 +382,7 @@ public class MainActivity extends Activity {
         }
     }
     private String clock(long ms){long s=Math.max(0,ms/1000);return String.format(Locale.US,"%d:%02d",s/60,s%60);}
-    private void updatePlayer(){if(player==null||destroyed)return;MediaItem item=player.getCurrentMediaItem();if(item!=null)now.setText(player.getMediaMetadata().title);play.setText(player.isPlaying()?"השהה":"נגן");long duration=player.getDuration(),position=player.getCurrentPosition();if(!dragging)seek.setProgress(duration>0?(int)(position*1000/duration):0);time.setText(clock(position)+" / "+clock(duration));shuffle.setText(player.getShuffleModeEnabled()?"ערבוב פעיל":"ערבוב כבוי");repeat.setText(switch(player.getRepeatMode()){case Player.REPEAT_MODE_ONE->"חזרה על שיר";case Player.REPEAT_MODE_ALL->"חזרה על הכול";default->"חזרה כבויה";});}
+    private void updatePlayer(){if(player==null||destroyed)return;MediaItem item=player.getCurrentMediaItem();if(item!=null)now.setText(player.getMediaMetadata().title);play.setText(player.isPlaying()?"⏸":"▶");long duration=player.getDuration(),position=player.getCurrentPosition();if(!dragging)seek.setProgress(duration>0?(int)(position*1000/duration):0);time.setText(clock(position)+" / "+clock(duration));shuffle.setText(player.getShuffleModeEnabled()?"⤨ ערבוב פעיל":"⤨ ערבוב כבוי");repeat.setText(switch(player.getRepeatMode()){case Player.REPEAT_MODE_ONE->"↻ חזרה על שיר";case Player.REPEAT_MODE_ALL->"↻ חזרה על הכול";default->"↻ חזרה כבויה";});}
     private void toast(String s){if(!destroyed)Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
     @Override protected void onResume(){super.onResume();handler.post(ticker);render();if(wasPaused){wasPaused=false;refresh();}}
     @Override protected void onPause(){wasPaused=true;handler.removeCallbacks(ticker);super.onPause();}

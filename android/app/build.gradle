@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'il.nolimits.music'
     compileSdk 35
-    defaultConfig { applicationId 'il.nolimits.music'; minSdk 26; targetSdk 35; versionCode 8; versionName '1.7.0' }
+    defaultConfig { applicationId 'il.nolimits.music'; minSdk 26; targetSdk 35; versionCode 9; versionName '1.7.1' }
     signingConfigs {
         release {
             // Never place signing credentials in this public repository.
