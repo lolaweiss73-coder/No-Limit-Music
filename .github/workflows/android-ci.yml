@@ -100,10 +100,8 @@ jobs:
           set -euo pipefail
           BACKUP_DIR="$RUNNER_TEMP/release-signing-backup"
           mkdir -p "$BACKUP_DIR"
-          # The encrypted backup is committed on main. The secret is not.
-          curl -fsSL --retry 3 \
-            "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/signing-backups/il.nolimits.music.v1.p12.encrypted.json" \
-            -o "$BACKUP_DIR/backup.encrypted.json"
+          # The v2 encrypted backup is in this branch; the secret is private.
+          cp signing-backups/il.nolimits.music.v2.p12.encrypted.json "$BACKUP_DIR/backup.encrypted.json"
           node tools/signing-backup.mjs decrypt \
             "$BACKUP_DIR/backup.encrypted.json" "$BACKUP_DIR/key-archive.zip"
           unzip -qo "$BACKUP_DIR/key-archive.zip" -d "$BACKUP_DIR"
@@ -119,7 +117,7 @@ jobs:
       - name: Explain missing signing secret
         if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
         run: |
-          echo "::warning::Debug build succeeded, but signed release requires repository secret NLM_SIGNING_BACKUP_PASSPHRASE. Never generate a replacement signing key automatically."
+          echo "::warning::Debug build succeeded. Signed release requires private v2 repository secret NLM_SIGNING_BACKUP_PASSPHRASE, or can be signed securely offline."
       - name: Assemble signed production APK
         if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
         working-directory: android
@@ -135,7 +133,7 @@ jobs:
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -Fi "Signer #1 certificate SHA-256 digest: a6b2d7f54643caae83dfac40ac9349c98767deabf2aede778e4500fe2674f643"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -Fi "Signer #1 certificate SHA-256 digest: 264eb910af0bc129a9847a68128c08199a13949af4001234e4044fdd24ae55fe"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='il.nolimits.music' versionCode='9'"
           cp "$APK" "$GITHUB_WORKSPACE/No-Limit-Music-1.7.1-release.apk"
           sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.1-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.1-release.sha256"
