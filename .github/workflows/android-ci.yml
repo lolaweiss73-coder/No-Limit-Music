@@ -149,3 +149,28 @@ jobs:
             No-Limit-Music-1.7.1-release.apk
             No-Limit-Music-1.7.1-release.sha256
           if-no-files-found: error
+
+      # Signed locally with a private, newly generated release identity.
+      # No private key or signing password is ever uploaded to GitHub.
+      - name: Prepare unsigned release for secure offline signing
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -v 4 "$APK" "$GITHUB_WORKSPACE/app-release-unsigned-aligned.apk"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$GITHUB_WORKSPACE/apksigner.jar"
+          test -s "$GITHUB_WORKSPACE/apksigner.jar"
+      - name: Save unsigned release and official Android signing utility
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: No-Limit-Music-1.7.1-offline-signing-input
+          path: |
+            app-release-unsigned-aligned.apk
+            apksigner.jar
+          if-no-files-found: error
