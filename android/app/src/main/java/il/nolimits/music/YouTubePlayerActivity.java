@@ -404,12 +404,18 @@ public final class YouTubePlayerActivity extends Activity {
         progress.setText((index+1)+" / "+queue.size());
         boolean needsCapture=false;
         for(Catalog.Track item:queue)if(!alreadySaved(item)){needsCapture=true;break;}
-        if(Build.VERSION.SDK_INT<29||!needsCapture||
-                (!CloudUpload.configured(this)&&!CloudUpload.keepOffline(this))){
-            status.setText("ניגון רציף · שרת הקלטות עדיין אינו מוגדר");
+        if(Build.VERSION.SDK_INT<29||!needsCapture){
+            status.setText(Build.VERSION.SDK_INT<29
+                    ?"הקלטה דורשת Android 10 ומעלה · המוזיקה תתנגן כרגיל"
+                    :"כל השירים זמינים בספרייה · ניגון רציף");
             playCurrent();
             return;
         }
+        // Always offer Android's consent when a new track needs capture.
+        // An unconfigured server is not a reason to silently disable capture:
+        // completed files remain private/pending locally until upload succeeds.
+        if(!CloudUpload.configured(this))
+            status.setText("שרת הקלטות לא הוגדר · קליפים תקינים ימתינו במכשיר להעלאה");
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},PERMISSION_AUDIO);
         else requestProjection();
