@@ -1,4 +1,4 @@
-# מוזיקה ללא גבולות — Android source (1.3.0)
+# מוזיקה ללא גבולות — Android source (1.4.0)
 
 Native Android application backed by the existing public music catalog at https://avi-music-player.lolaweiss73.chatgpt.site/ . The existing website is unchanged.
 
@@ -54,3 +54,14 @@ Official implementation reference: https://developer.android.com/media/media3/se
 - YouTube IFrame playback is separate and does not provide local audio copies through this feature.
 - Android versionCode 4 (1.3.0), application ID unchanged.
 - Requires device tests and release signing before distribution.
+
+## 1.4.0 — user-approved screen and playback-audio recording (2026-10-14)
+- A new button in the embedded player requests Android RECORD_AUDIO permission and MediaProjection full-screen permission for the selected entry. Android 14+ requires approval each new projection session.
+- While recording, an Android foreground service records a temporary whole-display MP4 and (independently) eligible internal playback audio through AudioPlaybackCaptureConfiguration. It does not record audio through the microphone.
+- Once consent has completed and both capture paths have started, the embedded player attempts to seek back to the start. The recording stops when the embedded player reports that the media ended, or manually via the in-app/notification Stop control.
+- Captured PCM is screened for usable non-silent audio. Significant silent edges are trimmed, a standalone stereo WAV is written to app-specific local storage, and temporary screen video is deleted. The resulting WAV can be selected from the existing library on subsequent plays, including offline. Users can delete the local copy.
+- Capture follows Android's standard playback permissions and policies. If the media player forbids capture, the file remains silent and the app reports failure. It cannot override protected players/surfaces or forcibly capture muted playback.
+- Screen capture can include notifications, messages and other applications on the display during the active session. The temporary screen recording is not retained, but users should avoid displaying sensitive information while recording.
+- Silence-trim logic is amplitude-based; it does not identify speech, ad breaks, or music segmentation. No microphone fallback.
+- This is an initial implementation, not a production-tested feature. Physical-device testing must verify foreground service, screen capture, WebView playback, stop signaling, audio eligibility and WAV output.
+- The production update signing key remains necessary to deliver an installable update over an existing app without data loss.
