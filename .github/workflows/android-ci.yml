@@ -7,17 +7,21 @@ on:
       - fix/embedded-playback
       - feature/auto-record-cloud-first-v15
       - feature/video-mp4-cloud-first-v16
+      - feature/continuous-capture-playlist-sync-v17
   pull_request:
     branches:
       - main
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   android-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      SIGNING_BACKUP_PASSPHRASE: ${{ secrets.NLM_SIGNING_BACKUP_PASSPHRASE }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -43,6 +47,21 @@ jobs:
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Check cloud service JavaScript syntax
         run: node --check server/server.mjs
+      - name: Test encrypted signing backup tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/signing-backup.mjs
+          TMP="$RUNNER_TEMP/signing-tool-test"
+          mkdir -p "$TMP"
+          printf 'PK\003\004test-key' > "$TMP/sample.zip"
+          node tools/signing-backup.mjs encrypt "$TMP/sample.zip" \
+            "$TMP/sample.encrypted.json" "$TMP/private-recovery.txt" \
+            il.test.signing SampleApp alias
+          node tools/signing-backup.mjs decrypt \
+            "$TMP/sample.encrypted.json" "$TMP/decrypted.zip" \
+            "$TMP/private-recovery.txt"
+          cmp "$TMP/sample.zip" "$TMP/decrypted.zip"
       - name: Cloud server HTTP smoke check
         shell: bash
         run: |
@@ -72,4 +91,91 @@ jobs:
         with:
           name: app-compile-test-only
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Restore release signing key from encrypted Git backup
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKUP_DIR="$RUNNER_TEMP/release-signing-backup"
+          mkdir -p "$BACKUP_DIR"
+          # The v2 encrypted backup is in this branch; the secret is private.
+          cp signing-backups/il.nolimits.music.v2.p12.encrypted.json "$BACKUP_DIR/backup.encrypted.json"
+          node tools/signing-backup.mjs decrypt \
+            "$BACKUP_DIR/backup.encrypted.json" "$BACKUP_DIR/key-archive.zip"
+          unzip -qo "$BACKUP_DIR/key-archive.zip" -d "$BACKUP_DIR"
+          KEYSTORE="$BACKUP_DIR/no-limit-music-release.p12"
+          test -s "$KEYSTORE"
+          test -s "$BACKUP_DIR/signing-password.txt"
+          PASSWORD="$(cat "$BACKUP_DIR/signing-password.txt")"
+          echo "::add-mask::$PASSWORD"
+          printf '%s\n' \
+            "NLM_SIGNING_KEYSTORE=$KEYSTORE" \
+            "NLM_SIGNING_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+          rm -f "$BACKUP_DIR/key-archive.zip"
+      - name: Explain missing signing secret
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
+        run: |
+          echo "::warning::Debug build succeeded. Signed release requires private v2 repository secret NLM_SIGNING_BACKUP_PASSPHRASE, or can be signed securely offline."
+      - name: Assemble signed production APK
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          
+      - name: Verify production package and APK signature
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -Fi "Signer #1 certificate SHA-256 digest: 264eb910af0bc129a9847a68128c08199a13949af4001234e4044fdd24ae55fe"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='il.nolimits.music' versionCode='10'"
+          cp "$APK" "$GITHUB_WORKSPACE/No-Limit-Music-1.7.2-release.apk"
+          sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.2-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.2-release.sha256"
+
+      - name: Save production APK
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: No-Limit-Music-1.7.2-signed-release
+          path: |
+            No-Limit-Music-1.7.2-release.apk
+            No-Limit-Music-1.7.2-release.sha256
+          if-no-files-found: error
+
+      # Signed locally with a private, newly generated release identity.
+      # No private key or signing password is ever uploaded to GitHub.
+      - name: Prepare unsigned release for secure offline signing
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -v 4 "$APK" "$GITHUB_WORKSPACE/app-release-unsigned-aligned.apk"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$GITHUB_WORKSPACE/apksigner.jar"
+          test -s "$GITHUB_WORKSPACE/apksigner.jar"
+          # Public encrypted escrow + recovery utility; NEVER include the private
+          # recovery passphrase or unencrypted key in CI artifacts.
+          cp "$GITHUB_WORKSPACE/signing-backups/il.nolimits.music.v2.p12.encrypted.json" \
+             "$GITHUB_WORKSPACE/signing-backup.encrypted.json"
+          cp "$GITHUB_WORKSPACE/tools/signing-backup.mjs" "$GITHUB_WORKSPACE/signing-backup.mjs"
+      - name: Save unsigned release and official Android signing utility
+        if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: No-Limit-Music-1.7.2-offline-signing-input
+          path: |
+            app-release-unsigned-aligned.apk
+            apksigner.jar
+            signing-backup.encrypted.json
+            signing-backup.mjs
           if-no-files-found: error

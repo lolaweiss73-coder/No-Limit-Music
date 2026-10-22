@@ -1,0 +1,14 @@
+# Never commit Android release signing credentials
+*.jks
+*.keystore
+*.p12
+*.pfx
+**/signing-password.txt
+*SIGNING-RECOVERY-SECRET*
+*signing-private*
+*private-signing*
+# APKs and build products are distributed as verified build artifacts, not tracked as source
+*.apk
+*.aab
+.gradle/
+**/build/

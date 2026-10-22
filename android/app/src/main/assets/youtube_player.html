@@ -16,13 +16,35 @@
   'use strict';
   var player=null;
   function signal(event){ window.location.href='music-player://'+event; }
+  window.getPlaybackTime=function(){
+    return player && player.getCurrentTime ? player.getCurrentTime() : 0;
+  };
+  function preferOwnCaptions(){
+    try {
+      if(player && player.getOptions && player.setOption &&
+         player.getOptions().indexOf('captions')>=0) {
+        player.setOption('captions','track',{});
+      }
+    } catch(e) {
+      // YouTube owns caption preferences; its player may ignore this request.
+    }
+  }
   window.pausePlayback=function(){
     if(player && player.pauseVideo) player.pauseVideo();
   };
+  window.playVideoId=function(id){
+    if(!player || !player.loadVideoById){signal('blocked');return;}
+    if(player.getVideoData && player.getVideoData().video_id===id){
+      player.seekTo(0,true);
+      player.playVideo();
+    }else{
+      player.loadVideoById(id);
+      preferOwnCaptions();
+    }
+  };
   window.restartPlayback=function(){
     if(!player || !player.seekTo){signal('blocked');return;}
-    player.seekTo(0, true);
-    player.playVideo();
+    player.seekTo(0,true);player.playVideo();
   };
   window.togglePlayback=function(){
     if(!player || !player.getPlayerState){ signal('blocked'); return; }
@@ -33,11 +55,12 @@
     player=new YT.Player('player',{
       width:'100%',height:'100%',videoId:'__VIDEO_ID__',
       playerVars:{
-        autoplay:0,controls:1,playsinline:1,
+        autoplay:0,controls:1,playsinline:1,cc_load_policy:0,
         origin:'https://avi-music-player.lolaweiss73.chatgpt.site'
       },
       events:{
-        onReady:function(e){signal('ready'); e.target.playVideo();},
+        onReady:function(e){preferOwnCaptions();signal('ready');},
+        onApiChange:function(){preferOwnCaptions();},
         onStateChange:function(e){
           if(e.data===1)signal('playing');
           else if(e.data===0)signal('ended');

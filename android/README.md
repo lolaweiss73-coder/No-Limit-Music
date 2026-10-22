@@ -1,4 +1,4 @@
-# מוזיקה ללא גבולות — Android source (1.6.0)
+# מוזיקה ללא גבולות — Android source (1.7.0)
 
 Native Android application backed by the existing public music catalog at https://avi-music-player.lolaweiss73.chatgpt.site/ . The existing website is unchanged.
 
@@ -93,3 +93,65 @@ release signing key. The two app installations have independent local data.
 - Any incomplete upload retains the MP4 privately for retry, regardless of offline preference; server acknowledgement is required before removing it.
 - Added a Media3 PlayerView activity so video recordings (online or local) display pictures with sound. Audio-only M4A uses the original audio player.
 - No server deployment or device capture verification has occurred; capture of YouTube WebView audio or video cannot be guaranteed on all Android devices.
+
+## 1.7.0 — continuous listening and capture, single Android consent per session
+
+The mixed playlist screen now plays existing self-hosted MP3s, uploaded MP4s
+(with video), locally saved MP4/M4A, and YouTube iframe video tracks in order,
+with in-session Next/Previous, shuffle and repeat-all controls. Existing
+server-hosted playback in the primary Media3 player is preserved.
+
+The new `CaptureSessionService` owns exactly one Android MediaProjection and
+one VirtualDisplay for the entire **foreground** listening session. Each song
+boundary rotates the recorder output Surface/temporary MP4 and PCM file
+**without requesting a new MediaProjection token or calling
+`createVirtualDisplay` again**. Segment finalization/CloudUpload happens
+in a separate worker so playback can advance without waiting for upload.
+A visible foreground notification and in-app Stop Recording control allow
+ending recording independently of listening. The app keeps the screen awake
+during live capture; Android may refuse video/audio capture depending on
+source protections and device policy.
+
+Clips are keyed by YouTube video ID. Tracks hosted on our server or already
+recorded are captured only temporarily then discarded; they are not uploaded
+again. The set of IDs already seen in a session also avoids duplicate uploads
+when the same video appears multiple times. Audio/video MP4 formation remains
+subject to successful Android playback capture. For newly captured material
+the default is cloud-first; the 1.6 offline No / MP4 / M4A preference is
+unchanged. If the server is not connected and offline saving is disabled,
+playback still works, and a user-approved capture can start; successfully
+finalized MP4s stay in private local staging until a cloud endpoint/token is
+configured. This staging is **not** confirmation of cloud storage and can use
+substantial device space. A failed upload keeps the source MP4 for later retry.
+
+Playlist refresh retains stable playlist ID selection and matches the latest
+`GET /api/library.json?sync=1` backend where configured. The backend
+periodically discovers YouTube channel playlists when a server-side YouTube
+Data API key and channel ID exist; a manual sync with missing credentials now
+returns a failure rather than falsely reporting fresh results. **The live
+`chatgpt.site` static site has NOT been connected to this server.**
+Until it is connected, Android sees only the 27 playlists already published
+by `playlists.json`. The user's two new public YouTube playlists cannot
+yet be verified in the live library.
+
+### Release gate / QA checklist
+- [x] Android compile and signed debug APK via GitHub Actions.
+- [x] Backend Node syntax and MP4 upload/range HTTP smoke test.
+- [ ] Physical-device test of one consent covering multiple song transitions.
+- [ ] Verify short transition gaps, synchronized picture/sound, skip behavior,
+      shuffle, next/previous, stop recording while music continues.
+- [ ] Deploy authenticated backend with durable private storage, YouTube API
+      credentials/channel and integrate actual public site's data source.
+- [ ] Verify that the two newly public playlists appear and existing playlists
+      update correctly. Check that sync failures never erase cached lists.
+- [ ] Production signing with the *existing* production signing key; debug APK
+      intentionally uses the `.dev` package suffix and can coexist safely.
+
+This is a **test build**, not a fully validated public release.
+
+## 1.7.2 — recording-gate and WebView audio fix (2026-10-22)
+
+- Version code incremented from **9** to **10**; production package stays `il.nolimits.music`.
+- A missing cloud endpoint no longer silently disables Android's capture-consent flow for uncached tracks. Valid captured MP4s stay private and pending until authenticated upload is configured.
+- Removed the own-UID-only AudioPlaybackCapture filter to allow eligible embedded renderer processes to be captured, still subject to Android/source restrictions.
+- Release artifacts preserve the existing v2 signing identity. Local device playback capture and cloud delivery remain unverified.
