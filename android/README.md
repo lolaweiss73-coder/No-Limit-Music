@@ -119,8 +119,10 @@ when the same video appears multiple times. Audio/video MP4 formation remains
 subject to successful Android playback capture. For newly captured material
 the default is cloud-first; the 1.6 offline No / MP4 / M4A preference is
 unchanged. If the server is not connected and offline saving is disabled,
-playback still works, but recording does not start because there is no valid
-upload destination. A failed upload keeps the source MP4 for later retry.
+playback still works, and a user-approved capture can start; successfully
+finalized MP4s stay in private local staging until a cloud endpoint/token is
+configured. This staging is **not** confirmation of cloud storage and can use
+substantial device space. A failed upload keeps the source MP4 for later retry.
 
 Playlist refresh retains stable playlist ID selection and matches the latest
 `GET /api/library.json?sync=1` backend where configured. The backend
