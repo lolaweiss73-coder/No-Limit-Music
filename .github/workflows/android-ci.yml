@@ -163,6 +163,11 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -v 4 "$APK" "$GITHUB_WORKSPACE/app-release-unsigned-aligned.apk"
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$GITHUB_WORKSPACE/apksigner.jar"
           test -s "$GITHUB_WORKSPACE/apksigner.jar"
+          # Public encrypted escrow + recovery utility; NEVER include the private
+          # recovery passphrase or unencrypted key in CI artifacts.
+          cp "$GITHUB_WORKSPACE/signing-backups/il.nolimits.music.v2.p12.encrypted.json" \
+             "$GITHUB_WORKSPACE/signing-backup.encrypted.json"
+          cp "$GITHUB_WORKSPACE/tools/signing-backup.mjs" "$GITHUB_WORKSPACE/signing-backup.mjs"
       - name: Save unsigned release and official Android signing utility
         if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
         uses: actions/upload-artifact@v4
@@ -171,4 +176,6 @@ jobs:
           path: |
             app-release-unsigned-aligned.apk
             apksigner.jar
+            signing-backup.encrypted.json
+            signing-backup.mjs
           if-no-files-found: error
