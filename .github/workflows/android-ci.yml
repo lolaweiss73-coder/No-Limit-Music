@@ -134,18 +134,18 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -Fi "Signer #1 certificate SHA-256 digest: 264eb910af0bc129a9847a68128c08199a13949af4001234e4044fdd24ae55fe"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='il.nolimits.music' versionCode='9'"
-          cp "$APK" "$GITHUB_WORKSPACE/No-Limit-Music-1.7.1-release.apk"
-          sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.1-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.1-release.sha256"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='il.nolimits.music' versionCode='10'"
+          cp "$APK" "$GITHUB_WORKSPACE/No-Limit-Music-1.7.2-release.apk"
+          sha256sum "$GITHUB_WORKSPACE/No-Limit-Music-1.7.2-release.apk" > "$GITHUB_WORKSPACE/No-Limit-Music-1.7.2-release.sha256"
 
       - name: Save production APK
         if: ${{ env.SIGNING_BACKUP_PASSPHRASE != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: No-Limit-Music-1.7.1-signed-release
+          name: No-Limit-Music-1.7.2-signed-release
           path: |
-            No-Limit-Music-1.7.1-release.apk
-            No-Limit-Music-1.7.1-release.sha256
+            No-Limit-Music-1.7.2-release.apk
+            No-Limit-Music-1.7.2-release.sha256
           if-no-files-found: error
 
       # Signed locally with a private, newly generated release identity.
@@ -172,7 +172,7 @@ jobs:
         if: ${{ env.SIGNING_BACKUP_PASSPHRASE == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: No-Limit-Music-1.7.1-offline-signing-input
+          name: No-Limit-Music-1.7.2-offline-signing-input
           path: |
             app-release-unsigned-aligned.apk
             apksigner.jar
