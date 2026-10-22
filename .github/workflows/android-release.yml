@@ -1,0 +1,120 @@
+name: Android signed release APK
+
+# Every merged push to main can build a signed APK in GitHub's cloud.
+# PR builds remain on android-ci.yml and never receive signing secrets.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'tools/signing-backup.mjs'
+      - 'signing-backups/**'
+      - '.github/workflows/android-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-apk:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check original signing identity is configured
+        id: signing
+        env:
+          SECRET_CONFIGURED: ${{ secrets.NLM_SIGNING_BACKUP_PASSPHRASE != '' }}
+        shell: bash
+        run: |
+          if [[ "$SECRET_CONFIGURED" == "true" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signed APK not built. Configure Actions secret NLM_SIGNING_BACKUP_PASSPHRASE using SIGNING_POLICY.md. Never generate a replacement signing key."
+          fi
+
+      - name: Checkout trusted main branch
+        if: steps.signing.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Install Java 17
+        if: steps.signing.outputs.configured == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle
+
+      - name: Install Android SDK
+        if: steps.signing.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$SDK_DIR/cmdline-tools"
+          curl -fsSL --retry 3 "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o "$RUNNER_TEMP/cmdline-tools.zip"
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$SDK_DIR/cmdline-tools"
+          mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "$SDK_DIR/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses > /dev/null || test "$?" -eq 141
+          "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Restore, build, and verify the original signed release
+        if: steps.signing.outputs.configured == 'true'
+        shell: bash
+        env:
+          SIGNING_BACKUP_PASSPHRASE: ${{ secrets.NLM_SIGNING_BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          TMP_SIGNING="$(mktemp -d "$RUNNER_TEMP/no-limit-signing.XXXXXX")"
+          trap 'rm -rf "$TMP_SIGNING"' EXIT
+          node tools/signing-backup.mjs decrypt \
+            signing-backups/il.nolimits.music.v1.p12.encrypted.json \
+            "$TMP_SIGNING/keys.zip"
+          unzip -qo "$TMP_SIGNING/keys.zip" -d "$TMP_SIGNING"
+          rm -f "$TMP_SIGNING/keys.zip"
+          test -s "$TMP_SIGNING/no-limit-music-release.p12"
+          test -s "$TMP_SIGNING/signing-password.txt"
+          export NLM_SIGNING_KEYSTORE="$TMP_SIGNING/no-limit-music-release.p12"
+          export NLM_SIGNING_PASSWORD="$(cat "$TMP_SIGNING/signing-password.txt")"
+          echo "::add-mask::$NLM_SIGNING_PASSWORD"
+          cd android
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          cd ..
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          SDK_BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          CERT_SHA="$("$SDK_BUILD_TOOLS/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          EXPECTED_SHA="a6b2d7f54643caae83dfac40ac9349c98767deabf2aede778e4500fe2674f643"
+          test "$CERT_SHA" = "$EXPECTED_SHA"
+          PACKAGE_INFO="$("$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep '^package:')"
+          PACKAGE_NAME="$(printf '%s\n' "$PACKAGE_INFO" | sed -n "s/.*name='\([^']*\)'.*/\1/p")"
+          VERSION_NAME="$(printf '%s\n' "$PACKAGE_INFO" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+          VERSION_CODE="$(printf '%s\n' "$PACKAGE_INFO" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")"
+          test "$PACKAGE_NAME" = "il.nolimits.music"
+          [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$VERSION_CODE" =~ ^[0-9]+$ ]]
+          mkdir -p release-output
+          cp "$APK" "release-output/No-Limit-Music-v$VERSION_NAME-code$VERSION_CODE-release.apk"
+          (cd release-output && sha256sum *.apk > SHA256SUMS.txt)
+          echo "Signed release APK verified: $PACKAGE_NAME v$VERSION_NAME (versionCode $VERSION_CODE)"
+
+      - name: Upload verified release APK (no private keys)
+        if: steps.signing.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: No-Limit-Music-signed-release
+          path: release-output/*
+          if-no-files-found: error
+          retention-days: 30
