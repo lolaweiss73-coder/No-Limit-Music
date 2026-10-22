@@ -148,3 +148,10 @@ yet be verified in the live library.
       intentionally uses the `.dev` package suffix and can coexist safely.
 
 This is a **test build**, not a fully validated public release.
+
+## 1.7.2 — recording-gate and WebView audio fix (2026-10-22)
+
+- Version code incremented from **9** to **10**; production package stays `il.nolimits.music`.
+- A missing cloud endpoint no longer silently disables Android's capture-consent flow for uncached tracks. Valid captured MP4s stay private and pending until authenticated upload is configured.
+- Removed the own-UID-only AudioPlaybackCapture filter to allow eligible embedded renderer processes to be captured, still subject to Android/source restrictions.
+- Release artifacts preserve the existing v2 signing identity. Local device playback capture and cloud delivery remain unverified.
