@@ -196,7 +196,11 @@ public final class CaptureSessionService extends Service {
         AudioPlaybackCaptureConfiguration cfg=
                 new AudioPlaybackCaptureConfiguration.Builder(projection)
                         .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                        .addMatchingUid(getApplicationInfo().uid)
+                        // WebView/embedded media may output audio from a
+                        // separate renderer UID. Restricting capture to this
+                        // Activity's UID can produce silent recordings.
+                        // Android still enforces source playback-capture policy
+                        // and the user's MediaProjection consent.
                         .build();
         AudioFormat format=new AudioFormat.Builder()
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
