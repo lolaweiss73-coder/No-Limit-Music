@@ -3,6 +3,24 @@ android {
     namespace 'il.nolimits.music'
     compileSdk 35
     defaultConfig { applicationId 'il.nolimits.music'; minSdk 26; targetSdk 35; versionCode 4; versionName '1.3.0' }
+    signingConfigs {
+        release {
+            // Credentials are supplied only by the trusted CI release job.
+            def keyStorePath = System.getenv('NLM_SIGNING_KEYSTORE')
+            def keyStorePassword = System.getenv('NLM_SIGNING_PASSWORD')
+            if (keyStorePath && keyStorePassword) {
+                storeFile file(keyStorePath)
+                storePassword keyStorePassword
+                keyAlias 'nolimitmusic'
+                keyPassword keyStorePassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies {
