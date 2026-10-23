@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/embedded-playback
+      - feature/v18-public-playlist-saves-lrc
       - feature/auto-record-cloud-first-v15
       - feature/video-mp4-cloud-first-v16
       - feature/continuous-capture-playlist-sync-v17
