@@ -44,7 +44,14 @@ public class MainActivity extends Activity {
             if(downloadId>=0) for(Catalog.Playlist p:playlists){
                 for(Catalog.Track t:p.tracks){
                     if(Catalog.downloadId(MainActivity.this,t)==downloadId){
-                        AudioTrim.inspectAsync(MainActivity.this,t);
+                        if(Catalog.downloadStatus(MainActivity.this,t)==DownloadManager.STATUS_SUCCESSFUL){
+                            Uri file=((DownloadManager)getSystemService(DOWNLOAD_SERVICE))
+                                    .getUriForDownloadedFile(downloadId);
+                            PublicMusicStorage.downloaded(MainActivity.this,t.id,"mp3",file);
+                            LyricsCache.fetchAsync(MainActivity.this,t.id);
+                            if(Catalog.local(MainActivity.this,t).isFile())
+                                AudioTrim.inspectAsync(MainActivity.this,t);
+                        }
                         render();
                         return;
                     }
@@ -85,6 +92,10 @@ public class MainActivity extends Activity {
         else registerReceiver(downloads,new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         refresh();
         CloudUpload.retryPending(this);
+        if(Build.VERSION.SDK_INT<29 &&
+                checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        !=android.content.pm.PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 81);
     }
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
@@ -176,6 +187,21 @@ public class MainActivity extends Activity {
             .setNegativeButton("ביטול",null).show();
     }
 
+    private void showLyrics(String id){
+        Uri uri=PublicMusicStorage.find(this,id,"lrc");
+        if(uri==null){toast("עדיין אין מילים לשיר הזה.");return;}
+        io.execute(()->{
+            try(java.io.InputStream stream=getContentResolver().openInputStream(uri)){
+                if(stream==null)throw new java.io.IOException("Lyrics not readable");
+                byte[] all=stream.readAllBytes();
+                if(all.length>260000)throw new java.io.IOException("Lyrics too long");
+                String lines=new String(all,java.nio.charset.StandardCharsets.UTF_8)
+                        .replaceAll("(?m)^\\[[0-9]{1,2}:[0-9]{2}(?:\\.[0-9]+)?\\]", "");
+                runOnUiThread(()->new AlertDialog.Builder(this).setTitle("מילות השיר")
+                        .setMessage(lines).setPositiveButton("סגור",null).show());
+            }catch(Exception e){runOnUiThread(()->toast("אי אפשר לפתוח את קובץ המילים."));}
+        });
+    }
     private void showCloudConfiguration(){
         LinearLayout layout=column();
         layout.setPadding(dp(20),dp(6),dp(20),0);
@@ -203,6 +229,10 @@ public class MainActivity extends Activity {
                     CloudUpload.retryPending(this);
                     refresh();
                 }).setNegativeButton("ביטול",null).show();
+    }
+    private void rememberPlaylist(Catalog.Track track){
+        if(selected>=0 && selected<playlists.size())
+            PublicMusicStorage.remember(this,track.id,playlists.get(selected).title);
     }
     private ArrayList<Catalog.Track> all(){LinkedHashMap<String,Catalog.Track> m=new LinkedHashMap<>();for(Catalog.Playlist p:playlists)for(Catalog.Track t:p.tracks){if(!m.containsKey(t.id)||t.serverAudio())m.put(t.id,t);}return new ArrayList<>(m.values());}
     private boolean matches(Catalog.Track t){return (!hostedOnly||t.serverAudio()||CloudUpload.uploaded(this,t.id))&&(!offlineOnly||Catalog.saved(this,t)||(CloudUpload.localAvailable(this,t.id)))&&t.title.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));}
@@ -237,8 +267,22 @@ public class MainActivity extends Activity {
                     13,saved?0xff83d7b2:MUTED));
             info.setOnClickListener(v->{if(hostedOnly||offlineOnly)start(t);else openYouTube(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             if(t.hosted())row.addView(button(saved?"מחק":"שמור",()->{if(Catalog.saved(this,t)){
-                new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;}((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).remove(Catalog.downloadId(this,t));Catalog.local(this,t).delete();getSharedPreferences("downloads",0).edit().remove(t.id).apply();render();}).setNegativeButton("ביטול",null).show();
-            }else try{Catalog.download(this,t);toast("ההורדה מופיעה בהתראות. השיר יישמר במכשיר.");}catch(Exception e){toast("לא ניתן להתחיל הורדה. נסה שוב.");}}));
+                new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{
+                    if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){
+                        toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;
+                    }
+                    if(Catalog.removeDownload(this,t)){
+                        PublicMusicStorage.remove(this,t.id,"lrc");
+                        toast("קובץ השיר נמחק מתיקיית ההורדות.");
+                    }else toast("לא ניתן למחוק את הקובץ. אפשר למחוק אותו דרך מנהל הקבצים.");
+                    render();
+                }).setNegativeButton("ביטול",null).show();
+            }else try{
+                rememberPlaylist(t);
+                Catalog.download(this,t);
+                LyricsCache.fetchAsync(this,t.id);
+                toast("השיר נשמר תחת הורדות / NoLimitMusic / שם הפלייליסט.");
+            }catch(Exception e){toast("לא ניתן להתחיל הורדה. בדוק הרשאות ואחסון.");}}));
             else if(recorded && !cloud)row.addView(button("העלה לאתר",()->{CloudUpload.enqueue(this,t.id);toast("מנסה להעלות את ההקלטה לאתר.");}));
             else if(recorded)row.addView(button("מחק הקלטה",()->{
                 if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){
@@ -249,10 +293,13 @@ public class MainActivity extends Activity {
             }));
             else if(cloud||t.cloud())row.addView(button("נגן",()->{if(hostedOnly||offlineOnly)start(t);else openYouTube(t);}));
             else row.addView(button("נגן",()->openYouTube(t)));
+            if(PublicMusicStorage.find(this,t.id,"lrc")!=null)
+                row.addView(button("מילים",()->showLyrics(t.id)));
             rows.addView(row);View rule=new View(this);rule.setBackgroundColor(CARD);rows.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));
         }
     }
     private void start(Catalog.Track chosen){
+        rememberPlaylist(chosen);
         boolean locallyVideo=RecordedVideo.saved(this,chosen.id);
         boolean locallyAudio=RecordedOfflineAudio.saved(this,chosen.id);
         boolean audioPreferred=CloudUpload.MODE_AUDIO.equals(CloudUpload.offlineMode(this));
@@ -273,7 +320,7 @@ public class MainActivity extends Activity {
                     .setMediaId(t.id).setUri(recorded?CloudUpload.localPlaybackUri(this,t.id):(cloud||t.cloud())?CloudUpload.recordedRemoteUri(this,t.id):Catalog.uri(this,t))
                     .setMediaMetadata(new MediaMetadata.Builder()
                             .setTitle(t.title).setArtist("מוזיקה ללא גבולות").build());
-            if(local&&!recorded){
+            if(local&&!recorded&&Catalog.local(this,t).isFile()){
                 AudioTrim.Bounds trim=AudioTrim.get(this,t);
                 if(trim==null) AudioTrim.inspectAsync(this,t);
                 else if(trim.changed()){
@@ -305,6 +352,7 @@ public class MainActivity extends Activity {
                 .putExtra(VideoPlaybackActivity.EXTRA_TITLE,t.title));
     }
     private void openYouTube(Catalog.Track t){
+        rememberPlaylist(t);
         if(player!=null)player.pause();
         JSONArray tracks=new JSONArray();
         int selectedIndex=0;
