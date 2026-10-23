@@ -42,14 +42,19 @@ final class RecordedVideo {
 
     static boolean saved(Context c, String id) {
         return id != null && id.matches("[A-Za-z0-9_-]{11}") &&
-                song(c, id).isFile() && song(c, id).length() > 4096;
+                ((song(c,id).isFile() && song(c,id).length()>4096) ||
+                        PublicMusicStorage.find(c,id,"mp4")!=null);
     }
 
-    static Uri uri(Context c, String id) { return Uri.fromFile(song(c, id)); }
+    static Uri uri(Context c, String id) {
+        Uri publicFile=PublicMusicStorage.find(c,id,"mp4");
+        return publicFile!=null?publicFile:Uri.fromFile(song(c,id));
+    }
 
     static boolean delete(Context c, String id) {
         File file = song(c,id);
-        return !file.exists() || file.delete();
+        return (!file.exists() || file.delete()) &&
+                PublicMusicStorage.remove(c,id,"mp4");
     }
 
     static final class Result {
