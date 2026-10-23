@@ -55,7 +55,7 @@ final class LyricsCache {
                 JSONObject data=new JSONObject(bytes.toString(StandardCharsets.UTF_8.name()));
                 if(!data.optBoolean("available",false))return;
                 String format=data.optString("format","txt");
-                if(!format.equals("lrc")&&!format.equals("txt"))return;
+                if(!format.equals("lrc"))return;
                 String lyrics=data.optString("text","");
                 if(lyrics.isEmpty()||lyrics.length()>200_000)return;
                 String filename=Catalog.safeFileName(track.title)+" ["+track.id+"]."+format;
