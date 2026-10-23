@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
         super.onCreate(state);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         if(state!=null){selected=state.getInt("selected",-1);query=state.getString("query","");hostedOnly=state.getBoolean("hosted",false);offlineOnly=state.getBoolean("offline",false);}
         buildUi();
+        // The intro may be skipped in settings; still ask on first app launch.
+        IntroActivity.requestStartupAudioPermission(this);
         try{playlists=Catalog.load(this);}catch(Exception e){toast("לא הצלחתי לטעון את הספרייה המקומית.");}
         render();
         SessionToken token=new SessionToken(this,new ComponentName(this,PlaybackService.class));
