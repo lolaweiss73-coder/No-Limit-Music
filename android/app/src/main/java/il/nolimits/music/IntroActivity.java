@@ -13,6 +13,21 @@ import java.nio.charset.StandardCharsets;
 /** App-owned introduction; never added to the music catalog or playback queue. */
 public class IntroActivity extends Activity {
     static final String PREFS="intro", DISABLED="skip_nRfo1NdTN7k", REPLAY="replay";
+    private static final String AUDIO_PROMPTED="record_audio_prompted_on_first_launch";
+    private static final int AUDIO_REQUEST=4090;
+
+    // Android runtime permission: request once at app launch, regardless of
+    // whether the user chooses to start playing a track. MediaProjection's
+    // separate, session-scoped system consent is requested on actual capture.
+    static void requestStartupAudioPermission(Activity activity){
+        if(android.os.Build.VERSION.SDK_INT<23 ||
+                activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                        ==android.content.pm.PackageManager.PERMISSION_GRANTED)return;
+        android.content.SharedPreferences prefs=activity.getSharedPreferences(PREFS,MODE_PRIVATE);
+        if(prefs.getBoolean(AUDIO_PROMPTED,false))return;
+        prefs.edit().putBoolean(AUDIO_PROMPTED,true).apply();
+        activity.requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},AUDIO_REQUEST);
+    }
     private WebView web;
     private TextView status;
     private boolean replay, leaving;
@@ -64,6 +79,7 @@ public class IntroActivity extends Activity {
         skip.setOnCheckedChangeListener((b,checked)->getSharedPreferences(PREFS,0).edit().putBoolean(DISABLED,checked).apply());root.addView(skip);
         Button next=new Button(this);next.setText("דלג");next.setAllCaps(false);next.setOnClickListener(v->complete());root.addView(next);
         setContentView(root);
+        if(!replay) requestStartupAudioPermission(this);
         try(java.io.InputStream in=getAssets().open("intro.html")){
             java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] buf=new byte[4096];int count;while((count=in.read(buf))!=-1)out.write(buf,0,count);
             web.loadDataWithBaseURL(Catalog.ORIGIN,new String(out.toByteArray(),StandardCharsets.UTF_8),"text/html","UTF-8",null);
