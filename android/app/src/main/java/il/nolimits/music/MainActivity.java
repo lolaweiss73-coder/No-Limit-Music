@@ -193,9 +193,9 @@ public class MainActivity extends Activity {
         io.execute(()->{
             try(java.io.InputStream stream=getContentResolver().openInputStream(uri)){
                 if(stream==null)throw new java.io.IOException("Lyrics not readable");
-                byte[] all=stream.readAllBytes();
-                if(all.length>260000)throw new java.io.IOException("Lyrics too long");
-                String lines=new String(all,java.nio.charset.StandardCharsets.UTF_8)
+                String all=Catalog.read(stream);
+                if(all.length()>260000)throw new java.io.IOException("Lyrics too long");
+                String lines=all
                         .replaceAll("(?m)^\\[[0-9]{1,2}:[0-9]{2}(?:\\.[0-9]+)?\\]", "");
                 runOnUiThread(()->new AlertDialog.Builder(this).setTitle("מילות השיר")
                         .setMessage(lines).setPositiveButton("סגור",null).show());
