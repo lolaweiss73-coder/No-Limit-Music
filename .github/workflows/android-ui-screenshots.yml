@@ -53,6 +53,20 @@ jobs:
             adb shell input swipe 600 1300 600 400 350
             sleep 2
             adb exec-out screencap -p > ui-shots/scrolled.png
+            adb shell input swipe 600 420 600 1770 350
+            sleep 2
+            adb shell input tap 540 820
+            sleep 6
+            adb exec-out screencap -p > ui-shots/playlist.png
+            adb shell uiautomator dump /sdcard/qa-playlist.xml
+            adb pull /sdcard/qa-playlist.xml ui-shots/qa-playlist.xml
+            grep -q 'הפעל פלייליסט ברצף' ui-shots/qa-playlist.xml
+            adb shell input tap 155 338
+            sleep 2
+            adb exec-out screencap -p > ui-shots/settings.png
+            adb shell uiautomator dump /sdcard/qa-settings.xml
+            adb pull /sdcard/qa-settings.xml ui-shots/qa-settings.xml
+            grep -q 'שמירה לאופליין' ui-shots/qa-settings.xml
             adb logcat -d -t 4000 | grep -E 'FATAL EXCEPTION|AndroidRuntime|NoLimit' > ui-shots/qa-logs.txt || true
             test -s ui-shots/library.png
       - name: Upload screenshot and UI evidence
