@@ -54,3 +54,13 @@ Official implementation reference: https://developer.android.com/media/media3/se
 - YouTube IFrame playback is separate and does not provide local audio copies through this feature.
 - Android versionCode 4 (1.3.0), application ID unchanged.
 - Requires device tests and release signing before distribution.
+
+## 1.3.1 — user-owned playlist downloads and LRC sidecars (pending device test)
+- Authorized server-hosted MP3s now download to public `Downloads/NoLimitMusic/<playlist name>/` instead of the app-private directory, so downloads are retained after uninstall.
+- Each filename includes the song title and a stable YouTube ID to avoid collisions; one copy per song ID is shared when the song belongs to multiple playlists, placed under the first playlist from which it was saved.
+- First-play and manual downloads use the same destination. Legacy private downloads stay available to the app unless the app is removed, and new downloads do not migrate old files automatically.
+- After download completion, the Android app checks `https://no-limit-music-sync.floot.app/_api/lyrics?youtubeId=<id>` and saves an approved `.lrc` next to the MP3 if lyrics exist. Timed and untimed lyric lines use the same LRC extension.
+- The public lyrics registry currently contains **no lyrics**. Only original, public-domain or licensed content may be added.
+- Android 10+ accesses saved public MP3s through DownloadManager content URIs for playback and silence analysis; Android 8/9 request the legacy storage permission.
+- Android versionCode 5, versionName 1.3.1, application ID remains `il.nolimits.music`.
+- GitHub CI compilation and real-device download/offline/uninstall tests are required. The signed release key remains separate and must not be changed.
