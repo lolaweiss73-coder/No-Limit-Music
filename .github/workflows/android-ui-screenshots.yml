@@ -1,0 +1,59 @@
+name: Android emulator UI screenshot QA
+
+on:
+  push:
+    branches:
+      - feature/v18-public-playlist-saves-lrc
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Get previously compiled Android 1.8 debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-compile-test-only
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 39903222925
+      - name: Enable hardware acceleration for Android emulator
+        run: |
+          sudo chmod 666 /dev/kvm || true
+          ls -lh *.apk
+      - name: Launch app and inspect playlist UI
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            mkdir -p ui-shots
+            adb install app-debug.apk
+            adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n il.nolimits.music.dev/.IntroActivity
+            sleep 8
+            adb exec-out screencap -p > ui-shots/intro.png
+            adb shell input keyevent 4
+            sleep 12
+            adb exec-out screencap -p > ui-shots/library.png
+            adb shell uiautomator dump /sdcard/qa-views.xml
+            adb pull /sdcard/qa-views.xml ui-shots/qa-views.xml
+            adb shell input swipe 600 1300 600 400 350
+            sleep 2
+            adb exec-out screencap -p > ui-shots/scrolled.png
+            adb logcat -d -t 4000 | grep -E 'FATAL EXCEPTION|AndroidRuntime|NoLimit' > ui-shots/qa-logs.txt || true
+            test -s ui-shots/library.png
+      - name: Upload screenshot and UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-1-8-visual-QA
+          path: ui-shots/
+          if-no-files-found: warn
