@@ -2,13 +2,13 @@ package il.nolimits.music;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.media.AudioFormat;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.util.Log;
 
-import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashSet;
@@ -40,8 +40,8 @@ final class AudioTrim {
     }
 
     private static String fingerprint(Context c, Catalog.Track track) {
-        File file = Catalog.local(c, track);
-        return track.id + ":" + file.length() + ":" + file.lastModified();
+        // DownloadManager IDs change on a new download, even across destinations.
+        return track.id + ":" + Catalog.downloadId(c, track);
     }
 
     private static SharedPreferences preferences(Context c) {
@@ -69,7 +69,7 @@ final class AudioTrim {
         }
         WORKERS.execute(() -> {
             try {
-                Bounds bounds = analyze(Catalog.local(app, track));
+                Bounds bounds = analyze(app, Catalog.uri(app, track));
                 if (bounds != null) {
                     preferences(app).edit()
                             .putLong(key + ":start", bounds.startMs)
@@ -84,11 +84,11 @@ final class AudioTrim {
         });
     }
 
-    private static Bounds analyze(File file) throws Exception {
+    private static Bounds analyze(Context context, Uri source) throws Exception {
         MediaExtractor extractor = new MediaExtractor();
         MediaCodec codec = null;
         try {
-            extractor.setDataSource(file.getAbsolutePath());
+            extractor.setDataSource(context, source, null);
             int audioTrack = -1;
             MediaFormat inputFormat = null;
             for (int i = 0; i < extractor.getTrackCount(); i++) {
