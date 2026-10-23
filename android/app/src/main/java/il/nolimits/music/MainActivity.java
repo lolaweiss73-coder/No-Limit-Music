@@ -41,7 +41,10 @@ public class MainActivity extends Activity {
             if(downloadId>=0) for(Catalog.Playlist p:playlists){
                 for(Catalog.Track t:p.tracks){
                     if(Catalog.downloadId(MainActivity.this,t)==downloadId){
-                        AudioTrim.inspectAsync(MainActivity.this,t);
+                        if(Catalog.saved(MainActivity.this,t)){
+                            AudioTrim.inspectAsync(MainActivity.this,t);
+                            LyricsCache.fetchAsync(MainActivity.this,t);
+                        }
                         render();
                         return;
                     }
@@ -50,6 +53,15 @@ public class MainActivity extends Activity {
             render();
         }
     };
+    private String playlistFor(Catalog.Track t){
+        if(selected>=0&&selected<playlists.size())
+            for(Catalog.Track item:playlists.get(selected).tracks)
+                if(item.id.equals(t.id))return playlists.get(selected).title;
+        for(Catalog.Playlist p:playlists)
+            for(Catalog.Track item:p.tracks)
+                if(item.id.equals(t.id))return p.title;
+        return "כל השירים";
+    }
     private boolean autoCacheEnabled(){
         return getSharedPreferences(CACHE_SETTINGS,0).getBoolean(AUTO_CACHE,true);
     }
@@ -70,7 +82,7 @@ public class MainActivity extends Activity {
                     for(Catalog.Playlist list:playlists)for(Catalog.Track t:list.tracks){
                         if(t.id.equals(item.mediaId)){
                             if(t.hosted()&&!Catalog.saved(MainActivity.this,t))
-                                try{Catalog.download(MainActivity.this,t);}catch(Exception ignored){}
+                                try{Catalog.download(MainActivity.this,t,list.title);}catch(Exception ignored){}
                             return;
                         }
                     }
@@ -80,6 +92,9 @@ public class MainActivity extends Activity {
         }catch(Exception e){toast("הנגן לא התחבר. סגור ופתח שוב את האפליקציה.");}},command->handler.post(command));
         if(Build.VERSION.SDK_INT>=33)registerReceiver(downloads,new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),Context.RECEIVER_EXPORTED);
         else registerReceiver(downloads,new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        if(Build.VERSION.SDK_INT<29 && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                !=android.content.pm.PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},62);
         refresh(false);
     }
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
@@ -156,8 +171,8 @@ public class MainActivity extends Activity {
                     13,saved?0xff83d7b2:MUTED));
             info.setOnClickListener(v->{if(t.hosted()||saved)start(t);else openYouTube(t);});info.setFocusable(true);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
             if(t.hosted())row.addView(button(saved?"מחק":"שמור",()->{if(Catalog.saved(this,t)){
-                new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;}((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).remove(Catalog.downloadId(this,t));Catalog.local(this,t).delete();getSharedPreferences("downloads",0).edit().remove(t.id).apply();render();}).setNegativeButton("ביטול",null).show();
-            }else try{Catalog.download(this,t);toast("ההורדה מופיעה בהתראות. השיר יישמר במכשיר.");}catch(Exception e){toast("לא ניתן להתחיל הורדה. נסה שוב.");}}));
+                new AlertDialog.Builder(this).setTitle("מחיקת העותק מהמכשיר?").setMessage(t.title).setPositiveButton("מחק",(d,w)->{if(player!=null&&player.getCurrentMediaItem()!=null&&player.getCurrentMediaItem().mediaId.equals(t.id)){toast("עצור ועבור לשיר אחר לפני מחיקת השיר המתנגן.");return;}((DownloadManager)getSystemService(DOWNLOAD_SERVICE)).remove(Catalog.downloadId(this,t));Catalog.local(this,t).delete();getSharedPreferences("downloads",0).edit().remove(t.id).remove(t.id+"_path").remove(t.id+"_playlist").apply();render();}).setNegativeButton("ביטול",null).show();
+            }else try{Catalog.download(this,t,playlistFor(t));toast("ההורדה מופיעה בהתראות. השיר יישמר בתיקיית ההורדות.");}catch(Exception e){toast("לא ניתן להתחיל הורדה. נסה שוב.");}}));
             else row.addView(button("נגן",()->openYouTube(t)));
             rows.addView(row);View rule=new View(this);rule.setBackgroundColor(CARD);rows.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));
         }
@@ -193,7 +208,7 @@ public class MainActivity extends Activity {
         // The current playback streams normally while DownloadManager makes a
         // local copy. Future playback resolves to the local file.
         if(chosen.hosted()&&!Catalog.saved(this,chosen)&&autoCacheEnabled()){
-            try{Catalog.download(this,chosen);}
+            try{Catalog.download(this,chosen,playlistFor(chosen));}
             catch(Exception e){toast("לא ניתן לשמור את השיר אוטומטית כרגע.");}
         }
     }
