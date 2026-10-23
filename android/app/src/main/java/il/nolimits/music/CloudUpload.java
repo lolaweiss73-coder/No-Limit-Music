@@ -201,7 +201,10 @@ final class CloudUpload {
                 Log.w(LOG,"Unable to remove staged video after exporting M4A");
             return "; עותק M4A שמור בתיקיית ההורדות";
         }
-        if (!RecordedVideo.delete(c,id))
+        // MODE_NO must remove ONLY private upload staging. Never delete a
+        // public Downloads copy the user saved in an earlier session.
+        File staged=RecordedVideo.song(c,id);
+        if (staged.exists() && !staged.delete())
             Log.w(LOG,"Unable to remove uploaded MP4 staging file");
         return "; ללא עותק אופליין";
     }
