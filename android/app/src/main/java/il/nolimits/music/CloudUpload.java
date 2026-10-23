@@ -197,7 +197,6 @@ final class CloudUpload {
             } else if (PublicMusicStorage.find(c,id,"m4a")==null) {
                 throw new IOException("No audio file available for public saving");
             }
-            File video=RecordedVideo.song(c,id);
             if (video.exists() && !video.delete())
                 Log.w(LOG,"Unable to remove staged video after exporting M4A");
             return "; עותק M4A שמור בתיקיית ההורדות";
