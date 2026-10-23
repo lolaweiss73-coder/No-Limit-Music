@@ -4,6 +4,10 @@ import android.content.Context;
 import android.app.DownloadManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import org.json.*;
 import java.io.*;
 import java.net.*;
@@ -135,13 +139,44 @@ final class Catalog {
             return cur!=null&&cur.moveToFirst()?cur.getInt(cur.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)):-1;
         }catch(Exception e){return -1;}
     }
-    static boolean saved(Context c,Track t){return local(c,t).isFile()&&downloadStatus(c,t)==DownloadManager.STATUS_SUCCESSFUL;}
-    static Uri uri(Context c,Track t){return saved(c,t)?Uri.fromFile(local(c,t)):t.cloud()?CloudUpload.recordedRemoteUri(c,t.id):Uri.parse(ORIGIN+t.src);}
+    static Uri downloadedUri(Context c, Track t) {
+        Uri publicUri = PublicMusicStorage.find(c,t.id,"mp3");
+        if(publicUri != null) return publicUri;
+        if(downloadStatus(c,t)==DownloadManager.STATUS_SUCCESSFUL) {
+            DownloadManager dm=(DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE);
+            Uri uri=dm.getUriForDownloadedFile(downloadId(c,t));
+            if(uri!=null) {
+                PublicMusicStorage.downloaded(c,t.id,"mp3",uri);
+                return uri;
+            }
+        }
+        return null;
+    }
+    static boolean saved(Context c,Track t){
+        return downloadedUri(c,t)!=null || (local(c,t).isFile() && downloadStatus(c,t)==DownloadManager.STATUS_SUCCESSFUL);
+    }
+    static Uri uri(Context c,Track t){
+        Uri publicFile=downloadedUri(c,t);
+        return publicFile!=null?publicFile:local(c,t).isFile()?Uri.fromFile(local(c,t)):
+                t.cloud()?CloudUpload.recordedRemoteUri(c,t.id):Uri.parse(ORIGIN+t.src);
+    }
+    static boolean removeDownload(Context c,Track t) {
+        boolean ok=PublicMusicStorage.remove(c,t.id,"mp3");
+        long old=downloadId(c,t);
+        if(old>=0) ((DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE)).remove(old);
+        File legacy=local(c,t);
+        if(legacy.exists()&&!legacy.delete()) ok=false;
+        if(ok) c.getSharedPreferences("downloads",0).edit().remove(t.id).apply();
+        return ok;
+    }
     static void download(Context c,Track t){
         if(!t.hosted())throw new IllegalArgumentException("Not a server track");
         if(saved(c,t))return;
         int status=downloadStatus(c,t);
         if(status==DownloadManager.STATUS_PENDING||status==DownloadManager.STATUS_RUNNING||status==DownloadManager.STATUS_PAUSED)return;
+        if(Build.VERSION.SDK_INT<29 &&
+                c.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED)
+            throw new SecurityException("Storage access permission needed on Android 8/9");
         DownloadManager dm=(DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE);
         long previous=downloadId(c,t);if(previous>=0)dm.remove(previous);
         File partial=local(c,t);if(partial.exists()&&!partial.delete())throw new IllegalStateException("Cannot remove partial download");
@@ -149,7 +184,9 @@ final class Catalog {
             .setTitle(t.title).setDescription("מוזיקה ללא גבולות")
             .setMimeType("audio/mpeg").setAllowedOverMetered(true)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalFilesDir(c,"music",t.id+".mp3");
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                    "NoLimitMusic/"+PublicMusicStorage.cleanName(PublicMusicStorage.album(c,t.id))
+                            +"/"+t.id+".mp3");
         long id=dm.enqueue(req);c.getSharedPreferences("downloads",0).edit().putLong(t.id,id).apply();
     }
 }
