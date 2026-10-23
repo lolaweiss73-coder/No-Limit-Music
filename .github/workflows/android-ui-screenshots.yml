@@ -43,28 +43,13 @@ jobs:
             adb exec-out screencap -p > ui-shots/intro.png
             adb shell uiautomator dump /sdcard/qa-intro.xml
             adb pull /sdcard/qa-intro.xml ui-shots/qa-intro.xml
-            python3 - <<'PY'
-            import subprocess,re,xml.etree.ElementTree as ET
-            root=ET.parse("ui-shots/qa-intro.xml").getroot()
-            for n in root.iter("node"):
-                if n.get("text")=="דלג":
-                    xy=list(map(int,re.findall(r"\\d+",n.get("bounds",""))))
-                    if len(xy)==4:
-                        subprocess.run(["adb","shell","input","tap",str((xy[0]+xy[2])//2),str((xy[1]+xy[3])//2)],check=True)
-                        break
-            PY
+            adb shell input tap 540 2240
             sleep 12
             adb exec-out screencap -p > ui-shots/library.png
             adb shell uiautomator dump /sdcard/qa-views.xml
             adb pull /sdcard/qa-views.xml ui-shots/qa-views.xml
-            python3 - <<'PY'
-            import xml.etree.ElementTree as ET
-            root=ET.parse("ui-shots/qa-views.xml").getroot()
-            nodes=list(root.iter("node"))
-            assert any(n.get("package")=="il.nolimits.music.dev" for n in nodes), "Android application not visible"
-            assert any("מוזיקה ללא גבולות" in n.get("text","") for n in nodes), "App title missing"
-            print("ANDROID_APP_FOREGROUND_AND_TITLE_OK")
-            PY
+            grep -q 'il.nolimits.music.dev' ui-shots/qa-views.xml
+            grep -q 'מוזיקה ללא גבולות' ui-shots/qa-views.xml
             adb shell input swipe 600 1300 600 400 350
             sleep 2
             adb exec-out screencap -p > ui-shots/scrolled.png
