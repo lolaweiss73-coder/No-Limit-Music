@@ -162,6 +162,7 @@ final class CloudUpload {
                 // Keep the source MP4 so offline audio can be retried safely.
                 localResult="; עיבוד עותק האופליין נכשל, המקור נשמר זמנית";
             }
+            if(keepOffline(c)) LyricsCache.fetchAsync(c,id);
             report(c,id,true,"הווידאו והשמע נשמרו באתר" + localResult);
         } catch (Exception e) {
             Log.w(LOG,"Cloud upload failed for "+id,e);
@@ -175,8 +176,11 @@ final class CloudUpload {
     private static String applyRetention(Context c,String id) throws IOException {
         String mode=offlineMode(c);
         if (MODE_VIDEO.equals(mode)) {
-            // Preserves the captured video with audio for offline replay.
-            return "; עותק וידאו שמור במכשיר";
+            File source=RecordedVideo.song(c,id);
+            if (!source.isFile()) throw new IOException("No local MP4 staging file");
+            PublicMusicStorage.saveFile(c,id,"mp4",source);
+            if (!source.delete()) Log.w(LOG,"Public MP4 saved but private copy could not be removed");
+            return "; עותק MP4 שמור בתיקיית ההורדות";
         }
         if (MODE_AUDIO.equals(mode)) {
             File video=RecordedVideo.song(c,id);
@@ -186,9 +190,17 @@ final class CloudUpload {
             }
             if (!RecordedOfflineAudio.saved(c,id))
                 throw new IOException("Offline audio was not created");
-            if (!RecordedVideo.delete(c,id))
-                Log.w(LOG,"Unable to remove video after extracting M4A");
-            return "; עותק שמע בלבד שמור במכשיר";
+            File audio=RecordedOfflineAudio.song(c,id);
+            if (audio.isFile()) {
+                PublicMusicStorage.saveFile(c,id,"m4a",audio);
+                if (!audio.delete()) Log.w(LOG,"Public M4A saved but private copy remains");
+            } else if (PublicMusicStorage.find(c,id,"m4a")==null) {
+                throw new IOException("No audio file available for public saving");
+            }
+            File video=RecordedVideo.song(c,id);
+            if (video.exists() && !video.delete())
+                Log.w(LOG,"Unable to remove staged video after exporting M4A");
+            return "; עותק M4A שמור בתיקיית ההורדות";
         }
         if (!RecordedVideo.delete(c,id))
             Log.w(LOG,"Unable to remove uploaded MP4 staging file");
