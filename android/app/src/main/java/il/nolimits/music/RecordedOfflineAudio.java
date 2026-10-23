@@ -29,17 +29,20 @@ final class RecordedOfflineAudio {
     }
 
     static boolean saved(Context context, String id) {
-        return id != null && id.matches("[A-Za-z0-9_-]{11}")
-                && song(context,id).isFile() && song(context,id).length() > 1024;
+        return id != null && id.matches("[A-Za-z0-9_-]{11}") &&
+                ((song(context,id).isFile() && song(context,id).length()>1024) ||
+                        PublicMusicStorage.find(context,id,"m4a")!=null);
     }
 
     static Uri uri(Context context,String id) {
-        return Uri.fromFile(song(context,id));
+        Uri publicFile=PublicMusicStorage.find(context,id,"m4a");
+        return publicFile!=null?publicFile:Uri.fromFile(song(context,id));
     }
 
     static boolean delete(Context context,String id) {
-        File f = song(context,id);
-        return !f.exists() || f.delete();
+        File f= song(context,id);
+        return (!f.exists() || f.delete()) &&
+                PublicMusicStorage.remove(context,id,"m4a");
     }
 
     /**
