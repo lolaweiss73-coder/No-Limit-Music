@@ -92,6 +92,7 @@ public final class YouTubePlayerActivity extends Activity {
     private int index;
     private String trackId;
     private boolean webpageReady;
+    private boolean waitingForEmbeddedPlayer;
     private boolean requestSent;
     private boolean sessionActive;
     private boolean serviceStarted;
@@ -205,7 +206,10 @@ public final class YouTubePlayerActivity extends Activity {
                     String action=uri.getHost();
                     if("ready".equals(action)){
                         webpageReady=true;
-                        beginListening();
+                        if(waitingForEmbeddedPlayer){
+                            waitingForEmbeddedPlayer=false;
+                            playCurrent();
+                        }else beginListening();
                     }else if("playing".equals(action)){
                         if(currentIsWeb){
                             acceptEnd=true;
@@ -350,8 +354,11 @@ public final class YouTubePlayerActivity extends Activity {
         }catch(Exception e){
             status.setText("לא ניתן לטעון נגן YouTube");
             webpageReady=true;
-            beginListening();
         }
+        // Request Android's capture permissions when playback opens. Do not
+        // depend on YouTube's iframe API dispatching 'ready': it may be late
+        // or blocked, and permissions must never silently disappear.
+        beginListening();
     }
 
     private RippleDrawable pill(int color){
@@ -519,6 +526,14 @@ public final class YouTubePlayerActivity extends Activity {
             audioPlayer.stop();
             mediaView.setVisibility(View.GONE);
             web.setVisibility(View.VISIBLE);
+            if(!webpageReady){
+                // Recording can be authorized before YouTube finishes loading.
+                // Defer playback itself until the iframe is actually ready.
+                waitingForEmbeddedPlayer=true;
+                status.setText("ההרשאות אושרו · ממתינה לטעינת נגן YouTube");
+                return;
+            }
+            waitingForEmbeddedPlayer=false;
             web.evaluateJavascript("window.playVideoId&&window.playVideoId('"+track.id+"')",null);
         }else{
             web.evaluateJavascript("window.pausePlayback&&window.pausePlayback()",null);
