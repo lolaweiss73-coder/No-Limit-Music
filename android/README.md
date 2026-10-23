@@ -155,3 +155,52 @@ This is a **test build**, not a fully validated public release.
 - A missing cloud endpoint no longer silently disables Android's capture-consent flow for uncached tracks. Valid captured MP4s stay private and pending until authenticated upload is configured.
 - Removed the own-UID-only AudioPlaybackCapture filter to allow eligible embedded renderer processes to be captured, still subject to Android/source restrictions.
 - Release artifacts preserve the existing v2 signing identity. Local device playback capture and cloud delivery remain unverified.
+
+
+## 1.8.0 — public playlist Downloads and one LRC lyrics format
+
+- Built on the **1.7.2** feature branch, not outdated `main`, preserving
+  continuous playback/capture and automatic playlist refresh work.
+- Authorized server MP3 files go to
+  `Downloads/NoLimitMusic/<sanitized playlist title>/<11-character-video-id>.mp3`
+  via Android DownloadManager rather than the app-private external folder.
+- If **offline saving is enabled**, newly cloud-acknowledged recordings are
+  exported to that public Downloads folder as MP4 or M4A. If offline saving
+  is disabled, no local copy is exported. Never remove upload staging before
+  cloud acknowledgement and successful export.
+- The app reads available public downloads through Android MediaStore and
+  reuses them where accessible; user-owned files remain on disk after uninstall.
+  Android may require renewed file access after reinstall, depending on its
+  storage security rules.
+- LRC is the **only** lyrics format. Timestamped and untimed lines share the
+  same format. For authorized songs, the app requests
+  `https://no-limit-music-sync.floot.app/_api/lyrics?youtubeId=<id>` and
+  stores `<id>.lrc` beside the track. The lyrics catalogue currently contains
+  **no tracks**: only owner-created, public-domain or licensed lyrics can be
+  added by the service operator.
+- Downloads use one file per video ID; when a track is in multiple playlists,
+  the first download owns the saved copy, avoiding duplicate storage.
+- Pre-Android-10 users are asked for public storage permission; Android 10+
+  uses the public DownloadManager destination and MediaStore for exports.
+- Legacy app-private MP3 files are still detected for playback. Uninstall
+  will still erase those **old** private copies unless they are migrated.
+- This is source code, **not a production APK**. CI build and actual Android
+  on-device behavior, media permissions, audio/video export, lyrics and
+  signed upgrade are not yet verified.
+
+### Release acceptance checklist
+- [ ] Compile `assembleDebug` and resolve all Android build failures.
+- [ ] Confirm a usable signed release, same `il.nolimits.music` certificate
+      as installed app; never rotate signing key accidentally.
+- [ ] Install over an older version without uninstalling or losing preferences.
+- [ ] Save server MP3; verify public folder grouped by selected playlist and
+      background playback/seek/shuffle/repeat.
+- [ ] Save an uploaded server recording as MP4 and M4A in separate test runs;
+      ensure original staging is not deleted before cloud upload succeeds.
+- [ ] Keep new downloaded MP3/MP4/M4A/LRC physically after uninstall.
+- [ ] Confirm the app can replay preserved files, or transparently request file
+      access if the OS refuses them after reinstall.
+- [ ] Check the synchronized/untimed LRC display and no fake lyric content.
+- [ ] Confirm existing 1.7.2 playlist sync, YouTube in-app player, intro clip,
+      no duplicate cloud uploads, Android capture permissions, and no regressions.
+- [ ] Confirm UI on the user's actual Samsung device.
