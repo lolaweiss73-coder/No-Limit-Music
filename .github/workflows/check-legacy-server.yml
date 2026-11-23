@@ -1,0 +1,54 @@
+name: Check old MorinMusic server availability
+on:
+  push:
+    branches:
+      - feature/morinmusic-apk
+    paths:
+      - .github/workflows/check-legacy-server.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  legacy-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check DNS and HTTP access without secrets
+        shell: bash
+        run: |
+          set +e
+          HOST="avi-music-player.lolaweiss73.chatgpt.site"
+          echo "CHECK_TIME_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "CONTROL_DNS_google.com:"
+          getent ahostsv4 google.com | head -2
+          echo "TARGET_DNS:"
+          getent ahostsv4 "$HOST" | head -8
+          echo "TARGET_CNAME:"
+          if command -v dig >/dev/null; then dig +time=4 +tries=1 +noall +answer "$HOST" CNAME; dig +time=4 +tries=1 +noall +answer "$HOST" A; fi
+          for ENDPOINT in / /playlists.json /health; do
+            echo "BEGIN_PROBE $ENDPOINT"
+            curl -L --connect-timeout 8 --max-time 15 -sS \
+              -D /tmp/morin_headers -o /tmp/morin_body \
+              -w 'RESULT_HTTP=%{http_code} IP=%{remote_ip} DNS_SECONDS=%{time_namelookup} TOTAL_SECONDS=%{time_total}\n' \
+              "https://$HOST$ENDPOINT"
+            CODE=$?
+            echo "CURL_EXIT_CODE=$CODE"
+            if [ "$CODE" -eq 0 ]; then
+              grep -Ei '^(HTTP/|content-type:|content-length:|location:)' /tmp/morin_headers | head -15
+              if [ "$ENDPOINT" = "/playlists.json" ]; then
+                python3 - <<'PY'
+          import json
+          try:
+              with open('/tmp/morin_body', encoding='utf-8') as f:
+                  payload=json.load(f)
+              print('JSON_VALID=YES')
+              print('PLAYLIST_COUNT='+str(len(payload)) if isinstance(payload,list) else 'JSON_TYPE='+str(type(payload).__name__))
+              if isinstance(payload,list):
+                  print('TRACK_COUNT='+str(sum(len(item.get('tracks',[])) for item in payload if isinstance(item,dict))))
+          except Exception as e:
+              print('JSON_VALID=NO; '+str(e))
+          PY
+              fi
+            fi
+            echo "END_PROBE $ENDPOINT"
+          done
