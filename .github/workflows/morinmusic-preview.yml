@@ -26,6 +26,38 @@ jobs:
         run: |
           mkdir -p morinmusic/project
           tar -xJf morinmusic/source.tar.xz -C morinmusic/project
+      - name: Add public YouTube playlists and start with playlist browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p morinmusic/project/app/src/main/assets
+          cp android/app/src/main/assets/playlists.json morinmusic/project/app/src/main/assets/playlists.json
+          cp morinmusic/PublicPlaylistsActivity.java morinmusic/project/app/src/main/java/com/morin/music/PublicPlaylistsActivity.java
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("morinmusic/project")
+          p = root / "app/src/main/java/com/morin/music/MainActivity.java"
+          s = p.read_text()
+          needle = '        root.addView(subtitle);'
+          assert needle in s
+          s = s.replace(needle, needle + '\n        button(root, "🎵  הפלייליסטים הציבוריים שלי (27 רשימות)", () -> startActivity(new Intent(this, PublicPlaylistsActivity.class)));', 1)
+          needle = '        refresh();\n    }'
+          assert needle in s
+          s = s.replace(needle, '        refresh();\n        if (saved == null) startActivity(new Intent(this, PublicPlaylistsActivity.class));\n    }', 1)
+          p.write_text(s)
+          p = root / "app/src/main/AndroidManifest.xml"
+          s = p.read_text()
+          needle = '        <service android:name=".PlaybackService"'
+          assert needle in s
+          s = s.replace(needle, '        <activity android:name=".PublicPlaylistsActivity" android:exported="false" />\n' + needle, 1)
+          p.write_text(s)
+          p = root / "app/build.gradle"
+          s = p.read_text()
+          assert "applicationId 'com.morin.music'" in s
+          s = s.replace("applicationId 'com.morin.music'", "applicationId 'com.morin.music.playlists'")
+          s = s.replace("versionCode 1", "versionCode 2").replace("versionName '0.1.0'", "versionName '0.2.0'")
+          p.write_text(s)
+          PY
       - name: Assemble debug APK
         working-directory: morinmusic/project
         run: gradle --no-daemon --stacktrace :app:assembleDebug
