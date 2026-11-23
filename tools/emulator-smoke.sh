@@ -2,7 +2,8 @@
 set -euo pipefail
 mkdir -p screenshots
 pushd android >/dev/null
-gradle --no-daemon :app:assembleDebug
+chmod +x gradlew
+./gradlew --no-daemon :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 popd >/dev/null
 PKG="il.nolimits.music.studio"
