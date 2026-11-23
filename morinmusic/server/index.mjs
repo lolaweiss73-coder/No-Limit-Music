@@ -105,6 +105,10 @@ const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://localhost');
     const p=url.pathname;
+    if(p==='/'&&req.method==='GET'){
+      res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});
+      return res.end('<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>MorinMusic</title><style>body{font-family:system-ui,sans-serif;background:#121a29;color:#f9fafb;max-width:680px;margin:8vh auto;padding:2rem}a{color:#a7f3d0}</style><h1>🎵 MorinMusic</h1><p>שרת המוזיקה החדש פעיל.</p><p><a href="/health">בדיקת בריאות</a> · <a href="/playlists.json">ספריית שירים</a></p></html>');
+    }
     if(p==='/health'&&req.method==='GET')return reply(res,200,{ok:true,version:1});
     if(p==='/playlists.json'&&req.method==='GET')return reply(res,200,playlists());
     if(p==='/api/catalog'&&req.method==='GET'){
