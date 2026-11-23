@@ -7,7 +7,8 @@ import android.os.Bundle;
 import android.widget.*;
 import android.view.*;
 import androidx.media3.common.*;
-import androidx.media3.session.*;
+import androidx.media3.session.SessionToken;
+import androidx.media3.session.MediaController;
 import com.google.common.util.concurrent.ListenableFuture;
 
 /** Stream server/local audio through the existing background-capable MediaSessionService. */
