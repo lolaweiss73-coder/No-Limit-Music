@@ -1,0 +1,14 @@
+{
+  "name": "morinmusic-media-server",
+  "version": "0.8.1",
+  "private": true,
+  "type": "module",
+  "description": "MorinMusic audio/video streaming backend",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node test.mjs"
+  }
+}

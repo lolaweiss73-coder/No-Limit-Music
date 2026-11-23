@@ -1,0 +1,5 @@
+morinmusic-media/
+*.tmp
+*.part
+node_modules/
+.env
