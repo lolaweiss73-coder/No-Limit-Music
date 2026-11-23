@@ -28,6 +28,7 @@ import javax.net.ssl.HttpsURLConnection;
  * No YouTube audiovisual content is downloaded or cached here.
  */
 public final class YouTubeLibraryActivity extends Activity {
+    private static final String YT_CACHE="morin_yt_metadata_v1";
     private static final String SCOPE_READ="https://www.googleapis.com/auth/youtube.readonly";
     private static final String SCOPE_WRITE="https://www.googleapis.com/auth/youtube";
     private static final int AUTH_REQUEST=7741;
@@ -128,6 +129,7 @@ public final class YouTubeLibraryActivity extends Activity {
             .setPositiveButton("נתק",(d,w)->{
                 google.revokeAccess(RevokeAccessRequest.builder().setScopes(Arrays.asList(new Scope(SCOPE_READ),new Scope(SCOPE_WRITE))).build()).addOnCompleteListener(task->{
                     token=null;canWrite=false;currentPlaylistId=null;playlists.clear();tracks.clear();
+                    getSharedPreferences(YT_CACHE,MODE_PRIVATE).edit().clear().apply();
                     render();report(task.isSuccessful()?"החשבון נותק.":"הנתונים נוקו. ייתכן שנדרש להסיר את הגישה גם בהגדרות חשבון Google.");
                 });
             }).setNegativeButton("ביטול",null).show();
@@ -188,7 +190,7 @@ public final class YouTubeLibraryActivity extends Activity {
                 if(result.size()>5000)throw new IOException("יותר מ־5000 רשימות, נדרש יבוא בשלבים.");
             }while(!page.isEmpty());
             synchronized(playlists){playlists.clear();playlists.addAll(result);}
-        },()->{currentPlaylistId=null;render();report("יובאו "+playlists.size()+" רשימות מהחשבון שלך. "+(canWrite?"ניתן לערוך רשימות שבבעלותך.":"לצפייה בלבד."));});
+        },()->{cachePlaylistMetadata();currentPlaylistId=null;render();report("יובאו "+playlists.size()+" רשימות מהחשבון שלך. "+(canWrite?"ניתן לערוך רשימות שבבעלותך.":"לצפייה בלבד."));});
     }
     private void loadTracks(){
         String selectedId=currentPlaylistId;
@@ -211,7 +213,20 @@ public final class YouTubeLibraryActivity extends Activity {
                 if(result.size()>10000)throw new IOException("הרשימה גדולה מדי לגרסת הבדיקה.");
             }while(!page.isEmpty());
             synchronized(tracks){tracks.clear();tracks.addAll(result);}
-        },()->{if(selectedId.equals(currentPlaylistId)){render();report("נטענו "+tracks.size()+" שירים מתוך YouTube.");}});
+        },()->{if(selectedId.equals(currentPlaylistId)){cacheTrackMetadata(selectedId);render();report("נטענו "+tracks.size()+" שירים מתוך YouTube.");}});
+    }
+    private void cachePlaylistMetadata(){
+        try{JSONArray a=new JSONArray();for(Playlist p:playlists){
+            a.put(new JSONObject().put("id",p.id).put("title",p.title));
+        }getSharedPreferences(YT_CACHE,MODE_PRIVATE).edit().putString("playlists",a.toString()).apply();
+        }catch(Exception ignored){}
+    }
+    private void cacheTrackMetadata(String playlist){
+        try{JSONArray a=new JSONArray();for(Track t:tracks){
+            if(t.videoId!=null&&t.videoId.matches("[A-Za-z0-9_-]{11}"))
+                a.put(new JSONObject().put("id",t.videoId).put("title",t.title));
+        }getSharedPreferences(YT_CACHE,MODE_PRIVATE).edit().putString("tracks_"+playlist,a.toString()).apply();
+        }catch(Exception ignored){}
     }
     private void render(){
         if(rows==null)return;rows.removeAllViews();

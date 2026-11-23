@@ -40,7 +40,7 @@ public final class LiveShowActivity extends Activity {
     private ScrollView scroll;
     private TextToSpeech tts;
     private boolean readAloud=false,busy=false,closed=false;
-    private String showJson="{}",model="openrouter/free";
+    private String showJson="{}",model="openrouter/free",recommendedId=null;
     private String title="",topic="",format="",rules="",castPrompt="";
     private interface AIProvider{String complete(JSONArray messages)throws Exception;}
     private AIProvider provider;
@@ -62,6 +62,7 @@ public final class LiveShowActivity extends Activity {
             }
             castPrompt=sb.toString();
         }catch(Exception ignored){}
+        model=getSharedPreferences(PREFS,MODE_PRIVATE).getString("model","openrouter/free");
         provider=this::callOpenRouter;
         build();
         tts=new TextToSpeech(this,s->{
@@ -103,6 +104,10 @@ public final class LiveShowActivity extends Activity {
         options.addView(button("🔈 קול כבוי/פועל",()->{readAloud=!readAloud;status.setText(readAloud?"הקראת טקסט בקול כללי פעילה":"הקראה כבויה");}),
                 new LinearLayout.LayoutParams(0,-2,1));
         add(root,options);
+        LinearLayout dj=row();
+        dj.addView(button("🎵 DJ: הצע שיר",this::recommendSong),new LinearLayout.LayoutParams(0,-2,1));
+        dj.addView(button("▶ נגן המלצת DJ",this::playRecommendation),new LinearLayout.LayoutParams(0,-2,1));
+        add(root,dj);
         status=label("כדי להתחיל, הוסף מפתח OpenRouter להגדרות.",12);
         status.setTextColor(SUB);add(root,status);
         scroll=new ScrollView(this);
@@ -136,6 +141,11 @@ public final class LiveShowActivity extends Activity {
         form.addView(modelText);
         EditText modelInput=edit("openrouter/free");
         modelInput.setText(model);form.addView(modelInput);
+        CheckBox share=new CheckBox(this);
+        share.setText("אני מאשר/ת להעביר שמות שירים ופלייליסטים שייבאתי ל־OpenRouter לצורך המלצות.");
+        share.setTextColor(WHITE);share.setTextSize(13);
+        share.setChecked(getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("share_youtube",false));
+        form.addView(share);
         new AlertDialog.Builder(this).setTitle("הגדרות מנוע AI")
             .setView(form)
             .setPositiveButton("שמור",(d,w)->{
@@ -143,6 +153,8 @@ public final class LiveShowActivity extends Activity {
                     if(!key.getText().toString().trim().isEmpty())encryptKey(key.getText().toString().trim());
                     model=modelInput.getText().toString().trim();
                     if(model.isEmpty())model="openrouter/free";
+                    getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("model",model)
+                        .putBoolean("share_youtube",share.isChecked()).apply();
                     status.setText("ההגדרות נשמרו. אפשר להתחיל תוכנית.");
                 }catch(Exception ex){status.setText("לא ניתן לשמור מפתח: "+ex.getMessage());}
             })
@@ -176,6 +188,42 @@ public final class LiveShowActivity extends Activity {
         c.init(Cipher.DECRYPT_MODE,aesKey(),new GCMParameterSpec(128,Base64.decode(iv,Base64.NO_WRAP)));
         return new String(c.doFinal(Base64.decode(ciphertext,Base64.NO_WRAP)),StandardCharsets.UTF_8);
     }
+    private String playlistContext(){
+        if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("share_youtube",false))return "";
+        android.content.SharedPreferences data=getSharedPreferences("morin_yt_metadata_v1",MODE_PRIVATE);
+        try{JSONArray playlists=new JSONArray(data.getString("playlists","[]"));
+            StringBuilder out=new StringBuilder("\nספריית YouTube של המשתמש, נמסרה בהסכמה לצורך התאמת מוזיקה:\n");
+            int count=0;
+            for(int i=0;i<playlists.length()&&i<60;i++){
+                JSONObject p=playlists.optJSONObject(i);if(p==null)continue;
+                String id=p.optString("id");
+                JSONArray tracks=new JSONArray(data.getString("tracks_"+id,"[]"));
+                if(tracks.length()==0)continue;
+                out.append("\nפלייליסט: ").append(p.optString("title")).append("\n");
+                for(int j=0;j<tracks.length()&&count<85;j++){
+                    JSONObject t=tracks.optJSONObject(j);if(t==null)continue;
+                    out.append("שיר: ").append(t.optString("title")).append(" | YT_ID:")
+                       .append(t.optString("id")).append("\n");count++;
+                }
+                if(count>=85)break;
+            }
+            return out.toString();
+        }catch(Exception ignored){return "";}
+    }
+    private void recommendSong(){
+        if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean("share_youtube",false)){
+            status.setText("כדי שה־DJ יציע שירים מתוך החשבון, אשר שיתוף שמות שירים בהגדרות AI.");
+            settings();return;
+        }
+        send("הצע שיר מתוך הפלייליסטים שלי שמתאים לנושא ולמצב הרוח, הסבר למה, 
+            כתוב את מזהה הסרטון כ־YT_ID:xxxxxxxxxxx כדי שאוכל להשמיע את ההמלצה.",false);
+    }
+    private void playRecommendation(){
+        if(recommendedId==null){status.setText("ה־DJ עוד לא המליץ על שיר עם מזהה YouTube תקין.");return;}
+        startActivity(new Intent(this,YouTubePlayerActivity.class)
+            .putExtra(YouTubePlayerActivity.EXTRA_ID,recommendedId)
+            .putExtra(YouTubePlayerActivity.EXTRA_TITLE,"המלצת ה־DJ"));
+    }
     private String systemPrompt(){
         return "אתה מנוע לסימולציית תוכנית אירוח/רדיו בדיונית בעברית. "
             +"שם: "+title+". פורמט: "+format+". נושא: "+topic+". "
@@ -186,7 +234,8 @@ public final class LiveShowActivity extends Activity {
             +"אנשים אמיתיים ודמויות מוכרות הם הדמיות ספרותיות, ולא קולותיהם האמיתיים או דבריהם. "
             +"אל תציג דמות כתיעוד אמיתי של האדם; אל תטען שהקולות אותנטיים. "
             +"אם אין מספיק פרטים תאלתר ברוח התכונות אך אל תייחס דברים שקריים לאדם אמיתי כאילו התרחשו באמת. "
-            +"השתמש בעברית טבעית, חדה, מצחיקה לפי ההקשר. אל תוסיף כותרות טכניות.";
+            +"השתמש בעברית טבעית, חדה, מצחיקה לפי ההקשר. אל תוסיף כותרות טכניות. "
+            +"אם אתה ממליץ על שיר מהספרייה, העתק במדויק את YT_ID: ולא המצא מזהים." +playlistContext();
     }
     private void send(String input,boolean userTyped){
         if(busy){status.setText("התוכנית עדיין מגיבה…");return;}
@@ -212,8 +261,10 @@ public final class LiveShowActivity extends Activity {
                     if(closed)return;
                     history.add(in);history.add(out);
                     append(reply);
+                    java.util.regex.Matcher match=java.util.regex.Pattern.compile("YT_ID:([A-Za-z0-9_-]{11})").matcher(reply);
+                    if(match.find())recommendedId=match.group(1);
                     status.setText("אפשר לשאול, להגיב או לשנות נושא.");
-                    if(readAloud&&tts!=null)tts.speak(reply,TextToSpeech.QUEUE_FLUSH,null,"morin_show");
+                    if(readAloud&&tts!=null)tts.speak(reply.replaceAll("YT_ID:[A-Za-z0-9_-]{11}",""),TextToSpeech.QUEUE_FLUSH,null,"morin_show");
                     busy=false;
                 });
             }catch(Exception e){runOnUiThread(()->{
