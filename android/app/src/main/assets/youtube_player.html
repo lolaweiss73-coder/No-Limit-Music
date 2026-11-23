@@ -36,6 +36,7 @@
         onStateChange:function(e){
           if(e.data===1)signal('playing');
           else if(e.data===0)signal('ended');
+          else if(e.data===2)signal('paused');
         },
         onError:function(){signal('error');},
         onAutoplayBlocked:function(){signal('blocked');}

@@ -28,6 +28,7 @@ public final class YouTubePlayerActivity extends Activity {
 
     private WebView web;
     private TextView status;
+    private boolean markedPlaying=false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -77,8 +78,16 @@ public final class YouTubePlayerActivity extends Activity {
                 Uri uri = request.getUrl();
                 if ("music-player".equals(uri.getScheme())) {
                     String event = uri.getHost();
-                    if ("playing".equals(event)) status.setText("מנגן בתוך האפליקציה");
-                    else if ("ended".equals(event)) status.setText("השיר הסתיים");
+                    if ("playing".equals(event)){
+                        status.setText("מנגן בתוך האפליקציה");
+                        if(!markedPlaying){markedPlaying=true;sendMarker("start");}
+                    } else if ("ended".equals(event)){
+                        status.setText("השיר הסתיים");
+                        if(markedPlaying){markedPlaying=false;sendMarker("end");}
+                    } else if ("paused".equals(event)){
+                        status.setText("הנגן מושהה");
+                        if(markedPlaying){markedPlaying=false;sendMarker("end");}
+                    }
                     else if ("blocked".equals(event)) status.setText("הניגון האוטומטי נחסם; לחץ על נגן.");
                     else if ("error".equals(event)) status.setText("השיר אינו זמין בנגן המובנה. ייתכן שבעליו חסם הטמעה.");
                     else if ("ready".equals(event)) status.setText("הנגן מוכן");
@@ -128,6 +137,17 @@ public final class YouTubePlayerActivity extends Activity {
         }
     }
 
+    private void sendMarker(String kind){
+        Intent mark=new Intent(this,CaptureService.class).setAction(CaptureService.ACTION_MARK);
+        mark.putExtra(CaptureService.EXTRA_MARK_KIND,kind)
+            .putExtra(CaptureService.EXTRA_MARK_ID,getIntent().getStringExtra(EXTRA_ID))
+            .putExtra(CaptureService.EXTRA_MARK_TITLE,getIntent().getStringExtra(EXTRA_TITLE));
+        // Only notify an already-running capture session. No implicit permission request.
+        if(getSharedPreferences(CaptureService.PREFS,MODE_PRIVATE)
+              .getString("status","").equals("מקליטה")){
+            try{startService(mark);}catch(Exception ignored){}
+        }
+    }
     private int dp(int n) {
         return Math.round(n * getResources().getDisplayMetrics().density);
     }
@@ -146,6 +166,7 @@ public final class YouTubePlayerActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if(markedPlaying){markedPlaying=false;sendMarker("end");}
         if (web != null) {
             web.stopLoading();
             web.loadUrl("about:blank");

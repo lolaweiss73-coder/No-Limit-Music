@@ -45,6 +45,7 @@ public final class YouTubeLibraryActivity extends Activity {
     private String currentPlaylistId=null,currentPlaylistTitle="";
     private final ArrayList<Playlist> playlists=new ArrayList<>();
     private final ArrayList<Track> tracks=new ArrayList<>();
+    private final Set<String> serverAudioIds=Collections.synchronizedSet(new HashSet<>());
     private static class Playlist {
         String id,title,privacy;
         Playlist(String a,String b,String c){id=a;title=b;privacy=c;}
@@ -86,12 +87,17 @@ public final class YouTubeLibraryActivity extends Activity {
         nav.addView(button("נתק חשבון",this::confirmDisconnect),new LinearLayout.LayoutParams(0,-2,1));
         add(root,button("☁️ רענן את כל השירים מכל הפלייליסטים",this::syncAllPlaylistTracks));
         add(root,nav);
+        LinearLayout mediaNav=line();
+        mediaNav.addView(button("🎥 הקלטה",()->startActivity(new Intent(this,CaptureActivity.class))),new LinearLayout.LayoutParams(0,-2,1));
+        mediaNav.addView(button("⚙ שמע / וידאו",()->startActivity(new Intent(this,MediaPreferencesActivity.class))),new LinearLayout.LayoutParams(0,-2,1));
+        add(root,mediaNav);
         status=txt("עדיין לא התחברת ל־Google.",13,MUTED);add(root,status);
         rows=column();add(root,rows);
         add(root,txt("נדרשת הגדרה חד־פעמית של Google Cloud: YouTube Data API v3, מסך הסכמה ו־OAuth client מסוג Android עבור חבילת גרסת הבדיקה וחתימת APK. הרשאת קריאה אינה מאפשרת שינויים. אין הורדה, הסרת פרסומות או עקיפת מגבלות רקע.",12,MUTED));
         add(root,button("תנאי השירות של YouTube",()->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.youtube.com/t/terms")))));
         setContentView(scroll);
         render();
+        loadHostedIndex();
     }
     private void authorize(boolean write){
         writingRequested=write;
@@ -275,6 +281,24 @@ public final class YouTubeLibraryActivity extends Activity {
         }getSharedPreferences(YT_CACHE,MODE_PRIVATE).edit().putString("tracks_"+playlist,a.toString()).apply();
         }catch(Exception ignored){}
     }
+    /** Read our own server catalog to label songs accurately. Network failure leaves YouTube usable. */
+    private void loadHostedIndex(){
+        importPool.execute(()->{
+            try{
+                ArrayList<Catalog.Playlist> catalog=Catalog.refresh(this);
+                HashSet<String> found=new HashSet<>();
+                for(Catalog.Playlist p:catalog)for(Catalog.Track t:p.tracks)
+                    if(t.hosted())found.add(t.id);
+                serverAudioIds.clear();serverAudioIds.addAll(found);
+                main.post(this::render);
+            }catch(Exception e){android.util.Log.i("MorinMusic","Server catalog not available: "+e.getMessage());}
+        });
+    }
+    private void openTrack(Track t){
+        if(!t.videoId.matches("[A-Za-z0-9_-]{11}")){toast("הסרטון אינו זמין.");return;}
+        startActivity(MediaSourceResolver.intentFor(this,t.videoId,t.title,serverAudioIds.contains(t.videoId)));
+    }
+    @Override protected void onResume(){super.onResume();if(rows!=null&&token!=null)render();}
     private void render(){
         if(rows==null)return;rows.removeAllViews();
         if(token==null){
@@ -301,14 +325,9 @@ public final class YouTubeLibraryActivity extends Activity {
             for(int i=0;i<tracks.size();i++){
                 final int ix=i;Track t=tracks.get(i);
                 LinearLayout item=column();
-                add(item,txt((i+1)+". "+t.title,15,TEXT));
+                add(item,txt((i+1)+". "+t.title+"  ·  "+MediaSourceResolver.label(this,t.videoId,serverAudioIds.contains(t.videoId)),15,TEXT));
                 LinearLayout controls=line();
-                controls.addView(button("▶ נגן",()->{
-                    if(!t.videoId.matches("[A-Za-z0-9_-]{11}")){toast("הסרטון לא זמין.");return;}
-                    startActivity(new Intent(this,YouTubePlayerActivity.class)
-                        .putExtra(YouTubePlayerActivity.EXTRA_ID,t.videoId)
-                        .putExtra(YouTubePlayerActivity.EXTRA_TITLE,t.title));
-                }),new LinearLayout.LayoutParams(0,-2,1));
+                controls.addView(button("▶ נגן",()->openTrack(t)),new LinearLayout.LayoutParams(0,-2,1));
                 if(canWrite){
                     controls.addView(button("↑",()->reorder(t,Math.max(0,ix-1))),new LinearLayout.LayoutParams(0,-2,.55f));
                     controls.addView(button("↓",()->reorder(t,Math.min(tracks.size()-1,ix+1))),new LinearLayout.LayoutParams(0,-2,.55f));
