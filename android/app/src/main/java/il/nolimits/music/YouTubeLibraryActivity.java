@@ -221,7 +221,7 @@ public final class YouTubeLibraryActivity extends Activity {
         if(currentPlaylistId==null){
             if(canWrite)add(rows,button("＋ צור פלייליסט חדש",this::createPlaylist));
             if(playlists.isEmpty())add(rows,txt("לא נמצאו רשימות או שעדיין לא הסתיים הייבוא.",15,MUTED));
-            synchronized(playlists)for(Playlist p:playlists){
+            for(Playlist p:playlists){
                 add(rows,button("🎵 "+p.title+"  ("+p.privacy+")",()->{
                     currentPlaylistId=p.id;currentPlaylistTitle=p.title;tracks.clear();render();loadTracks();
                 }));
@@ -236,7 +236,7 @@ public final class YouTubeLibraryActivity extends Activity {
                 add(rows,button("מחק את הפלייליסט כולו (עם אישור)",this::deletePlaylist));
             }
             if(tracks.isEmpty())add(rows,txt("רשימה ריקה או עדיין נטענת…",14,MUTED));
-            synchronized(tracks)for(int i=0;i<tracks.size();i++){
+            for(int i=0;i<tracks.size();i++){
                 final int ix=i;Track t=tracks.get(i);
                 LinearLayout item=column();
                 add(item,txt((i+1)+". "+t.title,15,TEXT));
