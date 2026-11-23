@@ -136,6 +136,10 @@ public class StudioActivity extends Activity {
         nav.addView(action("📂 הרכבים שמורים",this::chooseSaved),
                 new LinearLayout.LayoutParams(0,-2,1));
         append(root,nav,14);
+        LinearLayout integration=pair();
+        integration.addView(action("▶️ YouTube שלי",()->startActivity(new Intent(this,YouTubeLibraryActivity.class))),new LinearLayout.LayoutParams(0,-2,1));
+        integration.addView(action("🤖 הפעל תוכנית AI",this::startLiveShow),new LinearLayout.LayoutParams(0,-2,1));
+        append(root,integration,12);
 
         append(root,label("שם התוכנית",15,ACCENT,true),0);
         titleInput=edit("לדוגמה: הערב שבו Q איבד את הכוחות","");append(root,titleInput,12);
@@ -181,9 +185,7 @@ public class StudioActivity extends Activity {
                 new LinearLayout.LayoutParams(0,-2,1));
         append(root,tools,10);
         note=label("",13,SOFT,false);append(root,note,10);
-        append(root,label("גרסת בדיקה: ניהול ושמירת הרכבים עובדים ללא אינטרנט. "
-                +"יצירת דיאלוגים עם AI, קולות הדמויות, שידור חי וסנכרון חשבון YouTube עדיין אינם פעילים. "
-                +"דמויות מוכרות הן השראה בדיונית, לא קולותיהם האמיתיים.",12,SOFT,false),8);
+        append(root,label("גרסת בדיקה משולבת: ההרכבים נשמרים מקומית; AI חי דורש מפתח OpenRouter אישי, ו־YouTube דורש הגדרת OAuth. קולות הדמויות הם קול סינתטי כללי, ולא חיקוי ידוענים.",12,SOFT,false),8);
         setContentView(scroll);
     }
     private void renderCast(){
@@ -306,6 +308,11 @@ public class StudioActivity extends Activity {
                     getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY,dest.toString()).apply();
                     newShow();toast("ההרכב נמחק.");
                 }).setNegativeButton("ביטול",null).show();
+    }
+    private void startLiveShow(){
+        if(cast.isEmpty()){toast("יש לבחור לפחות משתתף אחד.");return;}
+        try{startActivity(new Intent(this,LiveShowActivity.class).putExtra("show",draft().toString()));}
+        catch(Exception e){toast("לא ניתן לפתוח תוכנית.");}
     }
     private void showOutline(){
         if(cast.isEmpty()){toast("כדי להכין שלד, הוסף משתתפים.");return;}
