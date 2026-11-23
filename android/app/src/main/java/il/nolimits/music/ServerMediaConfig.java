@@ -16,7 +16,7 @@ import javax.crypto.spec.GCMParameterSpec;
 final class ServerMediaConfig {
     private static final String PREFERENCES="morin_media_server_v1";
     private static final String ALIAS="morin_server_upload_token";
-    private static final String DEFAULT="https://avi-music-player.lolaweiss73.chatgpt.site/";
+    private static final String DEFAULT="https://morinmusic-media-production.up.railway.app/";
     private ServerMediaConfig(){}
     static String base(Context c){
         return c.getSharedPreferences(PREFERENCES,Context.MODE_PRIVATE).getString("base",DEFAULT);

@@ -1,0 +1,45 @@
+name: Probe MorinMusic live server
+on:
+  push:
+    branches:
+      - feature/morinmusic-apk
+    paths:
+      - .github/workflows/probe-morinmusic-live.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate server health, playlists and authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://morinmusic-media-production.up.railway.app"
+          echo "CHECKED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          for path in health playlists.json; do
+            echo "PROBING /$path"
+            result=$(curl --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 25 -sS \
+              -o "/tmp/${path//\//_}.json" \
+              -w "%{http_code}" "$BASE/$path")
+            echo "HTTP_$path=$result"
+            test "$result" = "200"
+          done
+          python3 - <<'PY'
+          import json
+          with open('/tmp/health.json', encoding='utf-8') as f:
+              health=json.load(f)
+          assert health['ok'] is True,health
+          print('HEALTH_OK=True')
+          with open('/tmp/playlists.json.json', encoding='utf-8') as f:
+              playlists=json.load(f)
+          assert isinstance(playlists,list),type(playlists)
+          print('PLAYLISTS_COUNT='+str(len(playlists)))
+          print('TRACKS_COUNT='+str(sum(len(p.get('tracks',[])) for p in playlists)))
+          PY
+          auth_code=$(curl -sS --connect-timeout 10 --max-time 20 -o /tmp/private.json -w "%{http_code}" "$BASE/api/catalog")
+          echo "UNAUTHENTICATED_CATALOG_HTTP=$auth_code"
+          test "$auth_code" = "401"
+          echo "LIVE_SERVER_OK"
