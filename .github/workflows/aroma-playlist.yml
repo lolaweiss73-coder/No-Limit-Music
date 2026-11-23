@@ -22,8 +22,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify preinstalled Android SDK
+        run: test -d "$ANDROID_HOME/platforms" && echo "Android SDK available at $ANDROID_HOME"
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
