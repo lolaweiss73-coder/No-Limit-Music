@@ -34,6 +34,7 @@ jobs:
           s = m.read_text()
           original = '<activity android:name=".IntroActivity" android:exported="true">\n            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n        </activity>'
           assert original in s, "Original launcher changed, must recheck manifest"
+          s = s.replace('<activity android:name=".StudioActivity" android:exported="false"/>', '')
           s = s.replace(original, '<activity android:name=".IntroActivity" android:exported="false"/>\n'
                         '        <activity android:name=".StudioActivity" android:exported="true">\n'
                         '            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n'
