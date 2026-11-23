@@ -14,10 +14,11 @@ import java.util.*;
 
 final class Catalog {
     static final String ORIGIN="https://avi-music-player.lolaweiss73.chatgpt.site/";
+    static String serverOrigin(Context c){return ServerMediaConfig.base(c);}
     static final class Track {
         final String id,title,src;
         Track(JSONObject o){ id=o.optString("youtubeId"); title=o.optString("title",id); src=o.optString("src",""); }
-        boolean hosted(){return src.equals("media/"+id+".mp3") && id.matches("[A-Za-z0-9_-]{11}");}
+        boolean hosted(){return (src.equals("media/"+id+".mp3")||src.equals("media/"+id+".m4a"))&&id.matches("[A-Za-z0-9_-]{11}");}
     }
     static final class Playlist {
         String title; final ArrayList<Track> tracks=new ArrayList<>();
@@ -40,7 +41,7 @@ final class Catalog {
         return parse(read(c.getAssets().open("playlists.json")));
     }
     static ArrayList<Playlist> refresh(Context c) throws Exception {
-        HttpURLConnection connection=(HttpURLConnection)new URL(ORIGIN+"playlists.json").openConnection();
+        HttpURLConnection connection=(HttpURLConnection)new URL(serverOrigin(c)+"playlists.json").openConnection();
         connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);
         try{
             if(connection.getResponseCode()!=200)throw new IOException("HTTP "+connection.getResponseCode());
@@ -92,7 +93,7 @@ final class Catalog {
             if(downloaded!=null)return downloaded;
             return Uri.fromFile(local(c,t));
         }
-        return Uri.parse(ORIGIN+t.src);
+        return Uri.parse(serverOrigin(c)+t.src);
     }
     static void download(Context c,Track t,String playlistName){
         if(!t.hosted())throw new IllegalArgumentException("Not a server track");
@@ -106,10 +107,11 @@ final class Catalog {
         long previous=downloadId(c,t);if(previous>=0)dm.remove(previous);
         File partial=local(c,t);if(partial.exists()&&!partial.delete())throw new IllegalStateException("Cannot remove partial download");
         String folder=safeFileName(playlistName);
-        String relative=DOWNLOAD_ROOT+"/"+folder+"/"+safeFileName(t.title)+" ["+t.id+"].mp3";
-        DownloadManager.Request req=new DownloadManager.Request(Uri.parse(ORIGIN+t.src))
+        String extension=t.src.endsWith(".m4a")?".m4a":".mp3";
+        String relative=DOWNLOAD_ROOT+"/"+folder+"/"+safeFileName(t.title)+" ["+t.id+"]"+extension;
+        DownloadManager.Request req=new DownloadManager.Request(Uri.parse(serverOrigin(c)+t.src))
             .setTitle(t.title).setDescription("מוזיקה ללא גבולות")
-            .setMimeType("audio/mpeg").setAllowedOverMetered(true)
+            .setMimeType(t.src.endsWith(".m4a")?"audio/mp4":"audio/mpeg").setAllowedOverMetered(true)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,relative);
         long id=dm.enqueue(req);

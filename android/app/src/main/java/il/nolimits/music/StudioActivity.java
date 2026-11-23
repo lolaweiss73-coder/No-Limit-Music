@@ -144,6 +144,7 @@ public class StudioActivity extends Activity {
         mediaTools.addView(action("🎥 הקלטת סשן",()->startActivity(new Intent(this,CaptureActivity.class))),new LinearLayout.LayoutParams(0,-2,1));
         mediaTools.addView(action("⚙ שמע / וידאו",()->startActivity(new Intent(this,MediaPreferencesActivity.class))),new LinearLayout.LayoutParams(0,-2,1));
         append(root,mediaTools,12);
+        append(root,action("☁️ חיבור וסנכרון שרת המדיה",()->startActivity(new Intent(this,ServerSyncActivity.class))),12);
 
         append(root,label("שם התוכנית",15,ACCENT,true),0);
         titleInput=edit("לדוגמה: הערב שבו Q איבד את הכוחות","");append(root,titleInput,12);

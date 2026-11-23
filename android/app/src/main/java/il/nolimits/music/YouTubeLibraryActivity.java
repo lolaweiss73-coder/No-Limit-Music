@@ -46,6 +46,7 @@ public final class YouTubeLibraryActivity extends Activity {
     private final ArrayList<Playlist> playlists=new ArrayList<>();
     private final ArrayList<Track> tracks=new ArrayList<>();
     private final Set<String> serverAudioIds=Collections.synchronizedSet(new HashSet<>());
+    private final java.util.Map<String,String> serverAudioSources=new java.util.concurrent.ConcurrentHashMap<>();
     private static class Playlist {
         String id,title,privacy;
         Playlist(String a,String b,String c){id=a;title=b;privacy=c;}
@@ -287,16 +288,18 @@ public final class YouTubeLibraryActivity extends Activity {
             try{
                 ArrayList<Catalog.Playlist> catalog=Catalog.refresh(this);
                 HashSet<String> found=new HashSet<>();
+                java.util.HashMap<String,String> paths=new java.util.HashMap<>();
                 for(Catalog.Playlist p:catalog)for(Catalog.Track t:p.tracks)
-                    if(t.hosted())found.add(t.id);
+                    if(t.hosted()){found.add(t.id);paths.put(t.id,t.src);}
                 serverAudioIds.clear();serverAudioIds.addAll(found);
+                serverAudioSources.clear();serverAudioSources.putAll(paths);
                 main.post(this::render);
             }catch(Exception e){android.util.Log.i("MorinMusic","Server catalog not available: "+e.getMessage());}
         });
     }
     private void openTrack(Track t){
         if(!t.videoId.matches("[A-Za-z0-9_-]{11}")){toast("הסרטון אינו זמין.");return;}
-        startActivity(MediaSourceResolver.intentFor(this,t.videoId,t.title,serverAudioIds.contains(t.videoId)));
+        startActivity(MediaSourceResolver.intentFor(this,t.videoId,t.title,serverAudioSources.get(t.videoId)));
     }
     @Override protected void onResume(){super.onResume();if(rows!=null&&token!=null)render();}
     private void render(){

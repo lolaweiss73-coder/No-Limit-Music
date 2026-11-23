@@ -48,6 +48,7 @@ public final class CaptureActivity extends Activity {
         add(root,button("סמן סוף שיר עכשיו",()->mark("end","סימון ידני","")));
         status=text("מוכנה",14);add(root,status);
         add(root,text("הסשנים נשמרים מקומית בטלפון. כדי להפוך סימוני התחלה וסיום לקליפים וקובצי M4A, השתמש בכפתור ״חתוך לפי סימונים״. החיתוך נשען על הסימונים, ואינו מנתח פרסומות בעצמו.",12));
+        add(root,button("☁️ סנכרון הקליפים לשרת",()->startActivity(new Intent(this,ServerSyncActivity.class))));
         add(root,button("רענן ספריית הקלטות",this::render));
         sessions=new LinearLayout(this);sessions.setOrientation(LinearLayout.VERTICAL);
         sessions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);add(root,sessions);

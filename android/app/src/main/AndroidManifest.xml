@@ -10,6 +10,7 @@
     <application android:label="מוזיקה ללא גבולות" android:icon="@drawable/ic_music" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="false"/>
         <activity android:name=".CaptureActivity" android:exported="false"/>
+        <activity android:name=".ServerSyncActivity" android:exported="false"/>
         <activity android:name=".MediaPreferencesActivity" android:exported="false"/>
         <activity android:name=".HostedTrackActivity" android:exported="false"/>
         <activity android:name=".LocalVideoActivity" android:exported="false"/>

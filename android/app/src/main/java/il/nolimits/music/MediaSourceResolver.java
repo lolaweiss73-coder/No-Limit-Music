@@ -42,7 +42,8 @@ final class MediaSourceResolver {
         if(serverAudio)return "☁️ שמע בשרת · ▶ YouTube לווידאו";
         return "▶ YouTube";
     }
-    static Intent intentFor(Context c,String id,String title,boolean serverAudio){
+    static Intent intentFor(Context c,String id,String title,String serverAudioSrc){
+        boolean serverAudio=serverAudioSrc!=null&&!serverAudioSrc.isEmpty();
         boolean video=preferVideo(c);
         File localVideo=local(c,id,"mp4");
         File localAudio=local(c,id,"m4a");
@@ -54,7 +55,7 @@ final class MediaSourceResolver {
                 .putExtra("uri",Uri.fromFile(localAudio).toString()).putExtra("title",title);
         if(serverAudio&&!video)
             return new Intent(c,HostedTrackActivity.class)
-                .putExtra("uri",Catalog.ORIGIN+"media/"+id+".mp3").putExtra("title",title);
+                .putExtra("uri",Catalog.serverOrigin(c)+serverAudioSrc).putExtra("title",title);
         return new Intent(c,YouTubePlayerActivity.class)
             .putExtra(YouTubePlayerActivity.EXTRA_ID,id)
             .putExtra(YouTubePlayerActivity.EXTRA_TITLE,title);
