@@ -1,0 +1,94 @@
+name: MorinMusic Android emulator smoke test
+on:
+  push:
+    branches:
+      - feature/morinmusic-apk
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-ui-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Enable emulator KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Prepare isolated Android test variant
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle=Path('android/app/build.gradle')
+          gradle.write_text(gradle.read_text().replace(
+              "applicationId 'il.nolimits.music'",
+              "applicationId 'il.nolimits.music.studio'"))
+          manifest=Path('android/app/src/main/AndroidManifest.xml')
+          s=manifest.read_text()
+          original='<activity android:name=".IntroActivity" android:exported="true">\n            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n        </activity>'
+          assert original in s
+          s=s.replace(original,'<activity android:name=".IntroActivity" android:exported="false"/>')
+          # CI only: allow ADB shell to open each screen directly for smoke testing.
+          for activity in ['StudioActivity','CaptureActivity','MediaPreferencesActivity',
+                           'YouTubeLibraryActivity','LiveShowActivity','ServerSyncActivity']:
+              needle='<activity android:name=".'+activity+'" android:exported="false"/>'
+              assert needle in s,activity
+              s=s.replace(needle,'<activity android:name=".'+activity+'" android:exported="true"/>')
+          s=s.replace('<activity android:name=".StudioActivity" android:exported="true"/>',
+              '<activity android:name=".StudioActivity" android:exported="true">\n'
+              '            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n'
+              '        </activity>')
+          manifest.write_text(s)
+          PY
+      - name: Launch and inspect six primary screens
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: |
+            set -euo pipefail
+            mkdir -p screenshots
+            cd android
+            gradle --no-daemon :app:assembleDebug
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            PKG="il.nolimits.music.studio"
+            for ACTIVITY in StudioActivity CaptureActivity MediaPreferencesActivity YouTubeLibraryActivity LiveShowActivity ServerSyncActivity; do
+              echo "Checking $ACTIVITY"
+              adb shell am start -n "$PKG/il.nolimits.music.$ACTIVITY"
+              sleep 4
+              PID="$(adb shell pidof "$PKG" | tr -d '\r' || true)"
+              if [ -z "$PID" ]; then
+                echo "App crashed on $ACTIVITY"
+                adb logcat -d -b crash
+                exit 1
+              fi
+              adb shell screencap -p "/sdcard/$ACTIVITY.png"
+              adb pull "/sdcard/$ACTIVITY.png" "../screenshots/$ACTIVITY.png"
+            done
+            CRASHES="$(adb logcat -d -b crash | grep -E 'FATAL EXCEPTION|Process: il.nolimits.music.studio' || true)"
+            if [ -n "$CRASHES" ]; then
+              echo "$CRASHES"
+              exit 1
+            fi
+            echo "PASS: launched six main screens without app process crash"
+      - name: Save screen captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MorinMusic-emulator-screens
+          path: screenshots/*.png
+          if-no-files-found: ignore
