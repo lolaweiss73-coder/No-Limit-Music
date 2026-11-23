@@ -51,6 +51,10 @@ jobs:
           assert needle in s
           s = s.replace(needle, '        <activity android:name=".PublicPlaylistsActivity" android:exported="false" />\n' + needle, 1)
           p.write_text(s)
+          p = root / "app/src/main/res/values/strings.xml"
+          xml = p.read_text()
+          xml = xml.replace("מורין מיוזיק", "MorinMusic Playlists")
+          p.write_text(xml)
           p = root / "app/build.gradle"
           s = p.read_text()
           assert "applicationId 'com.morin.music'" in s
