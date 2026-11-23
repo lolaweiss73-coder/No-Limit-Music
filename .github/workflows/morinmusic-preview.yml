@@ -1,0 +1,37 @@
+name: MorinMusic test APK
+on:
+  push:
+    branches:
+      - feature/morinmusic-apk
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK 35
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Unpack source (isolated from No-Limit-Music)
+        run: |
+          mkdir -p morinmusic/project
+          tar -xJf morinmusic/source.tar.xz -C morinmusic/project
+      - name: Assemble debug APK
+        working-directory: morinmusic/project
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MorinMusic-debug-APK
+          path: morinmusic/project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
