@@ -34,6 +34,7 @@ public final class YouTubeLibraryActivity extends Activity {
     private static final int AUTH_REQUEST=7741;
     private static final int BG=0xff10131d, PANEL=0xff222a3a, TEXT=0xfff7f7fc, MUTED=0xffb9c5d8;
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
+    private final ExecutorService importPool=Executors.newSingleThreadExecutor();
     private final Handler main=new Handler(Looper.getMainLooper());
     private AuthorizationClient google;
     private String token=null;
@@ -83,6 +84,7 @@ public final class YouTubeLibraryActivity extends Activity {
         nav.addView(button("רענן",()->{if(token==null)authorize(canWrite);else loadPlaylists();}),new LinearLayout.LayoutParams(0,-2,1));
         nav.addView(button("חזור לרשימות",()->{currentPlaylistId=null;render();}),new LinearLayout.LayoutParams(0,-2,1));
         nav.addView(button("נתק חשבון",this::confirmDisconnect),new LinearLayout.LayoutParams(0,-2,1));
+        add(root,button("☁️ רענן את כל השירים מכל הפלייליסטים",this::syncAllPlaylistTracks));
         add(root,nav);
         status=txt("עדיין לא התחברת ל־Google.",13,MUTED);add(root,status);
         rows=column();add(root,rows);
@@ -190,7 +192,7 @@ public final class YouTubeLibraryActivity extends Activity {
                 if(result.size()>5000)throw new IOException("יותר מ־5000 רשימות, נדרש יבוא בשלבים.");
             }while(!page.isEmpty());
             synchronized(playlists){playlists.clear();playlists.addAll(result);}
-        },()->{cachePlaylistMetadata();currentPlaylistId=null;render();report("יובאו "+playlists.size()+" רשימות מהחשבון שלך. "+(canWrite?"ניתן לערוך רשימות שבבעלותך.":"לצפייה בלבד."));});
+        },()->{cachePlaylistMetadata();currentPlaylistId=null;render();syncAllPlaylistTracks();report("יובאו "+playlists.size()+" רשימות מהחשבון שלך. מתחילה לייבא גם את השירים. "+(canWrite?"ניתן לערוך רשימות שבבעלותך.":"לצפייה בלבד."));});
     }
     private void loadTracks(){
         String selectedId=currentPlaylistId;
@@ -214,6 +216,51 @@ public final class YouTubeLibraryActivity extends Activity {
             }while(!page.isEmpty());
             synchronized(tracks){tracks.clear();tracks.addAll(result);}
         },()->{if(selectedId.equals(currentPlaylistId)){cacheTrackMetadata(selectedId);render();report("נטענו "+tracks.size()+" שירים מתוך YouTube.");}});
+    }
+    /** Imports song metadata from every owned playlist, without downloading media. */
+    private void syncAllPlaylistTracks(){
+        if(token==null){report("כדי לסנכרן שירים צריך להתחבר ל־Google.");return;}
+        final ArrayList<Playlist> snapshot=new ArrayList<>(playlists);
+        if(snapshot.isEmpty()){report("אין פלייליסטים שבבעלות החשבון.");return;}
+        importPool.execute(()->{
+            int imported=0,tracksImported=0,failed=0;
+            for(Playlist playlist:snapshot){
+                if(Thread.currentThread().isInterrupted()||token==null)break;
+                try{
+                    JSONArray cached=new JSONArray();String page="";
+                    do{
+                        JSONObject response=api("GET",
+                            "playlistItems?part=snippet&playlistId="+enc(playlist.id)+"&maxResults=50"+
+                            (page.isEmpty()?"":"&pageToken="+enc(page)),null);
+                        JSONArray items=response.optJSONArray("items");
+                        if(items!=null)for(int i=0;i<items.length();i++){
+                            JSONObject item=items.optJSONObject(i);
+                            if(item==null)continue;
+                            JSONObject snippet=item.optJSONObject("snippet");
+                            if(snippet==null)continue;
+                            JSONObject resource=snippet.optJSONObject("resourceId");
+                            String video=resource==null?"":resource.optString("videoId");
+                            if(video.matches("[A-Za-z0-9_-]{11}"))
+                                cached.put(new JSONObject().put("id",video).put("title",snippet.optString("title")));
+                        }
+                        page=response.optString("nextPageToken");
+                        if(cached.length()>10000)throw new IOException("פלייליסט גדול מדי");
+                    }while(!page.isEmpty());
+                    if(token==null)break;
+                    getSharedPreferences(YT_CACHE,MODE_PRIVATE).edit()
+                        .putString("tracks_"+playlist.id,cached.toString()).apply();
+                    imported++;
+                    tracksImported+=cached.length();
+                }catch(Exception e){
+                    failed++;
+                }
+                final int n=imported,f=failed,total=tracksImported;
+                report("ייבוא ספרייה: "+(n+f)+"/"+snapshot.size()+" פלייליסטים, "+total+" שירים.");
+            }
+            final int n=imported,f=failed,total=tracksImported;
+            if(token!=null)report("ייבוא ראשוני הסתיים: "+n+" פלייליסטים, "+total+
+                " שירים זמינים להמלצות DJ"+(f>0?". "+f+" רשימות לא נטענו, ייתכן בגלל הגבלות או מכסת API.":"."));
+        });
     }
     private void cachePlaylistMetadata(){
         try{JSONArray a=new JSONArray();for(Playlist p:playlists){
@@ -354,5 +401,5 @@ public final class YouTubeLibraryActivity extends Activity {
                 new JSONObject().put("id",t.id).put("snippet",snippet));
         },this::loadTracks));
     }
-    @Override protected void onDestroy(){executor.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){executor.shutdownNow();importPool.shutdownNow();super.onDestroy();}
 }
