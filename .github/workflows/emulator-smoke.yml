@@ -59,32 +59,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 900
-          script: |
-            set -euo pipefail
-            mkdir -p screenshots
-            cd android
-            gradle --no-daemon :app:assembleDebug
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            PKG="il.nolimits.music.studio"
-            for ACTIVITY in StudioActivity CaptureActivity MediaPreferencesActivity YouTubeLibraryActivity LiveShowActivity ServerSyncActivity; do
-              echo "Checking $ACTIVITY"
-              adb shell am start -n "$PKG/il.nolimits.music.$ACTIVITY"
-              sleep 4
-              PID="$(adb shell pidof "$PKG" | tr -d '\r' || true)"
-              if [ -z "$PID" ]; then
-                echo "App crashed on $ACTIVITY"
-                adb logcat -d -b crash
-                exit 1
-              fi
-              adb shell screencap -p "/sdcard/$ACTIVITY.png"
-              adb pull "/sdcard/$ACTIVITY.png" "../screenshots/$ACTIVITY.png"
-            done
-            CRASHES="$(adb logcat -d -b crash | grep -E 'FATAL EXCEPTION|Process: il.nolimits.music.studio' || true)"
-            if [ -n "$CRASHES" ]; then
-              echo "$CRASHES"
-              exit 1
-            fi
-            echo "PASS: launched six main screens without app process crash"
+          script: bash tools/emulator-smoke.sh
       - name: Save screen captures
         if: always()
         uses: actions/upload-artifact@v4
