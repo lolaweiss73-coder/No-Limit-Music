@@ -215,8 +215,7 @@ public final class LiveShowActivity extends Activity {
             status.setText("כדי שה־DJ יציע שירים מתוך החשבון, אשר שיתוף שמות שירים בהגדרות AI.");
             settings();return;
         }
-        send("הצע שיר מתוך הפלייליסטים שלי שמתאים לנושא ולמצב הרוח, הסבר למה, 
-            כתוב את מזהה הסרטון כ־YT_ID:xxxxxxxxxxx כדי שאוכל להשמיע את ההמלצה.",false);
+        send("הצע שיר מתוך הפלייליסטים שלי שמתאים לנושא ולמצב הרוח. הסבר למה, וציין את מזהה הסרטון כ־YT_ID:xxxxxxxxxxx כדי שאוכל להשמיע את ההמלצה.",false);
     }
     private void playRecommendation(){
         if(recommendedId==null){status.setText("ה־DJ עוד לא המליץ על שיר עם מזהה YouTube תקין.");return;}
