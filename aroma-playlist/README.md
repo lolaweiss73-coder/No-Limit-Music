@@ -2,7 +2,7 @@
 Independent Android app to identify tracks continuously from the microphone and build an ordered playlist.
 
 ## Status and build
-This is an **experimental alpha**. A GitHub Actions workflow builds an installable **debug-signed** APK. Song recognition and Android foreground-service behavior must be tested on a real device. The Shazam protocol is unofficial and may change without notice.
+This is an **experimental alpha**. GitHub Actions builds the **non-debuggable release variant** as an aligned unsigned APK. Official Android `apksigner` then signs it offline using an owner-controlled, persistent private keystore. **Do not distribute unsigned files as installable builds.** The release signature is verified with APK Signature Scheme v2 and v3. Song recognition and Android foreground-service behavior must still be tested on a real device. The Shazam protocol is unofficial and may change without notice.
 
 - Requires Android 7.0+ (API 24), microphone and Internet.
 - Starts only by tapping **התחל האזנה**; foreground service shows a permanent notification and continues when the screen turns off.
@@ -17,6 +17,6 @@ The files in `app/src/main/python/legacy_shazamio` derive from [ShazamIO v0.6.0]
 ### Build locally
 With Android SDK, JDK 17, Gradle 8.9, and Python 3.11:
 ```sh
-gradle -p aroma-playlist :app:assembleDebug
+gradle -p aroma-playlist :app:assembleRelease
 ```
-CI workflow: `.github/workflows/aroma-playlist.yml` in the parent repository. Download the `aroma-playlist-debug-apk` artifact after a successful Actions run.
+CI workflow: `.github/workflows/aroma-playlist.yml` in the parent repository. CI archives an **unsigned** `aroma-playlist-release-unsigned` artifact for offline signing, and publishes the Android `apksigner` CLI. Keep the release PKCS#12 keystore and its password secure and separate from the public repository. Sign all future releases with the same key for in-place updates. Never commit the private key or password to GitHub. If migrating from a debug-signed install, export the playlist and uninstall the debug build first because the signing certificates differ.
