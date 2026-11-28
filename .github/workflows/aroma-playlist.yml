@@ -1,4 +1,4 @@
-name: Aroma Playlist APK
+name: Aroma Playlist RELEASE APK
 on:
   push:
     branches: [aroma-playlist]
@@ -28,12 +28,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build installable debug APK
-        run: gradle -p aroma-playlist :app:assembleDebug --stacktrace --no-daemon
+      - name: Build production release APK (unsigned)
+        run: gradle -p aroma-playlist :app:assembleRelease --stacktrace --no-daemon
       - name: Archive APK
         uses: actions/upload-artifact@v4
         with:
-          name: aroma-playlist-debug-apk
-          path: aroma-playlist/app/build/outputs/apk/debug/*.apk
+          name: aroma-playlist-release-unsigned
+          path: aroma-playlist/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
