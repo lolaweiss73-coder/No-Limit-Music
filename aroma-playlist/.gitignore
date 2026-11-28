@@ -1,0 +1,15 @@
+# Never commit unencrypted Android signing keys or passwords
+*.p12
+*.jks
+*.keystore
+*.pem
+*.key
+*signing-password*.txt
+.env
+.env.*
+# Android build output
+.gradle/
+build/
+**/build/
+*.apk
+# The encrypted .p12.enc.b64 signing backup is intentionally tracked
