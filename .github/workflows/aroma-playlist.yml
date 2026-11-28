@@ -30,10 +30,25 @@ jobs:
           gradle-version: '8.9'
       - name: Build production release APK (unsigned)
         run: gradle -p aroma-playlist :app:assembleRelease --stacktrace --no-daemon
+      - name: Zipalign unsigned release for offline signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name zipalign | sort -V | tail -1)"
+          APK="$(find aroma-playlist/app/build/outputs/apk/release -maxdepth 1 -name '*unsigned.apk' | head -1)"
+          "$ZIPALIGN" -p -f 4 "$APK" aroma-playlist/app/build/outputs/apk/release/aroma-release-aligned-unsigned.apk
+          "$ZIPALIGN" -c -v 4 aroma-playlist/app/build/outputs/apk/release/aroma-release-aligned-unsigned.apk
+      - name: Export official Android apksigner tool for local signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apksigner-cli
+          path: /usr/local/lib/android/sdk/build-tools/35.0.0/lib/apksigner.jar
+          if-no-files-found: error
+          retention-days: 7
       - name: Archive APK
         uses: actions/upload-artifact@v4
         with:
           name: aroma-playlist-release-unsigned
-          path: aroma-playlist/app/build/outputs/apk/release/*.apk
+          path: aroma-playlist/app/build/outputs/apk/release/aroma-release-aligned-unsigned.apk
           if-no-files-found: error
           retention-days: 30
